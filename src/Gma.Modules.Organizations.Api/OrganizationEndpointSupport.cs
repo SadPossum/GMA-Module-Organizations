@@ -40,7 +40,8 @@ internal static class OrganizationEndpointSupport
 
     public static bool TryGetSubject(HttpContext context, out string subjectId)
     {
-        subjectId = context.User.FindFirstValue(ApplicationClaimNames.Subject)?.Trim() ?? string.Empty;
+        subjectId = (context.User.FindFirstValue(ApplicationClaimNames.Subject) ??
+            context.User.FindFirstValue(ClaimTypes.NameIdentifier))?.Trim() ?? string.Empty;
         return subjectId.Length > 0;
     }
 
