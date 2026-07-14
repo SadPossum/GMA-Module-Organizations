@@ -8,6 +8,7 @@ using Gma.Framework.Pagination;
 using Gma.Modules.Organizations.Api.Requests;
 using Gma.Modules.Organizations.Application.Commands;
 using Gma.Modules.Organizations.Application.Queries;
+using Gma.Modules.Organizations.Contracts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -43,7 +44,7 @@ internal static class OrganizationEndpoints
             return (await dispatcher.QueryAsync(new ListMyOrganizationsQuery(
                 subjectId, page ?? PageRequest.DefaultPage, pageSize ?? PageRequest.DefaultPageSize), token)
                 .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationListResponse>(StatusCodes.Status200OK);
 
         group.MapPost("", async (CreateOrganizationRequest request, HttpContext context,
             IRequestDispatcher dispatcher, CancellationToken token) =>
@@ -56,7 +57,7 @@ internal static class OrganizationEndpoints
             return (await dispatcher.SendAsync(new CreateOrganizationCommand(
                 request.Name, request.Slug, subjectId, OrganizationEndpointSupport.Actor(subjectId)), token)
                 .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationMembershipSummaryDto>(StatusCodes.Status200OK);
 
         group.MapGet("/{organizationId:guid}", async (Guid organizationId, HttpContext context,
             IRequestDispatcher dispatcher, CancellationToken token) =>
@@ -68,7 +69,7 @@ internal static class OrganizationEndpoints
 
             return (await dispatcher.QueryAsync(new GetOrganizationQuery(organizationId, subjectId), token)
                 .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationMembershipSummaryDto>(StatusCodes.Status200OK);
 
         group.MapPut("/{organizationId:guid}", async (Guid organizationId,
             UpdateOrganizationRequest request, HttpContext context,
@@ -83,7 +84,7 @@ internal static class OrganizationEndpoints
                 organizationId, request.Name, request.Slug, request.ExpectedVersion,
                 subjectId, OrganizationEndpointSupport.Actor(subjectId)), token)
                 .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationDto>(StatusCodes.Status200OK);
     }
 
     private static void MapLifecycle(RouteGroupBuilder group)
@@ -111,7 +112,7 @@ internal static class OrganizationEndpoints
                 organizationId, action, request.ExpectedVersion,
                 subjectId, OrganizationEndpointSupport.Actor(subjectId)), token)
                 .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationDto>(StatusCodes.Status200OK);
     }
 
     private static void MapMemberships(RouteGroupBuilder group)
@@ -129,7 +130,7 @@ internal static class OrganizationEndpoints
                 organizationId, subjectId, page ?? PageRequest.DefaultPage,
                 pageSize ?? PageRequest.DefaultPageSize), token).ConfigureAwait(false))
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationMemberListResponse>(StatusCodes.Status200OK);
 
         MapMembershipAction(group, "suspend", OrganizationMembershipAction.Suspend);
         MapMembershipAction(group, "resume", OrganizationMembershipAction.Resume);
@@ -149,7 +150,7 @@ internal static class OrganizationEndpoints
                 request.ExpectedCurrentOwnerVersion, request.ExpectedTargetVersion,
                 subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationMembershipDto>(StatusCodes.Status200OK);
     }
 
     private static void MapMembershipAction(
@@ -171,7 +172,7 @@ internal static class OrganizationEndpoints
                 request.ExpectedOrganizationVersion, request.ExpectedMembershipVersion,
                 subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationMembershipDto>(StatusCodes.Status200OK);
     }
 
     private static void MapInvitations(RouteGroupBuilder group)
@@ -189,7 +190,7 @@ internal static class OrganizationEndpoints
                 organizationId, subjectId, page ?? PageRequest.DefaultPage,
                 pageSize ?? PageRequest.DefaultPageSize), token).ConfigureAwait(false))
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationInvitationListResponse>(StatusCodes.Status200OK);
 
         group.MapPost("/{organizationId:guid}/invitations", async (Guid organizationId,
             CreateOrganizationInvitationRequest request, HttpContext context,
@@ -204,7 +205,7 @@ internal static class OrganizationEndpoints
                 organizationId, request.RecipientEmail, request.LifetimeHours,
                 subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationInvitationIssuedDto>(StatusCodes.Status200OK);
 
         group.MapPost("/{organizationId:guid}/invitations/{invitationId:guid}/revoke", async (
             Guid organizationId, Guid invitationId, RevokeOrganizationInvitationRequest request,
@@ -219,7 +220,7 @@ internal static class OrganizationEndpoints
                 organizationId, invitationId, request.ExpectedVersion,
                 subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationInvitationDto>(StatusCodes.Status200OK);
 
         group.MapPost("/{organizationId:guid}/invitations/{invitationId:guid}/reissue", async (
             Guid organizationId, Guid invitationId, ReissueOrganizationInvitationRequest request,
@@ -234,7 +235,7 @@ internal static class OrganizationEndpoints
                 organizationId, invitationId, request.ExpectedVersion, request.LifetimeHours,
                 subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationInvitationIssuedDto>(StatusCodes.Status200OK);
     }
 
     private static void MapInvitationAcceptance(IEndpointRouteBuilder endpoints, string moduleName)
@@ -246,7 +247,8 @@ internal static class OrganizationEndpoints
         invitations.MapPost("/preview", async (PreviewOrganizationInvitationRequest request,
             IRequestDispatcher dispatcher, CancellationToken cancellationToken) =>
             (await dispatcher.QueryAsync(new PreviewOrganizationInvitationQuery(request.Token), cancellationToken)
-                .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes));
+                .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes))
+            .Produces<OrganizationInvitationPreviewDto>(StatusCodes.Status200OK);
 
         invitations.MapPost("/accept", async (AcceptOrganizationInvitationRequest request,
             HttpContext context, IRequestDispatcher dispatcher, CancellationToken token) =>
@@ -259,6 +261,7 @@ internal static class OrganizationEndpoints
             return (await dispatcher.SendAsync(new AcceptOrganizationInvitationCommand(
                 request.Token, subjectId, OrganizationEndpointSupport.Actor(subjectId)), token)
                 .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        }).RequireAuthorization();
+        }).Produces<OrganizationInvitationAcceptanceDto>(StatusCodes.Status200OK)
+            .RequireAuthorization();
     }
 }

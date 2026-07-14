@@ -46,7 +46,8 @@ public sealed class OrganizationsAdminApiModule : IAdminApiModule
                 token => dispatcher.QueryAsync(new ListOrganizationCatalogForAdministrationQuery(
                     page ?? PageRequest.DefaultPage, pageSize ?? PageRequest.DefaultPageSize), token),
                 cancellationToken,
-                errorStatusCodes: ErrorStatusCodes).ConfigureAwait(false));
+                errorStatusCodes: ErrorStatusCodes).ConfigureAwait(false))
+            .Produces<OrganizationCatalogListResponse>(StatusCodes.Status200OK);
 
         group.MapGet("/{organizationId:guid}/members", async (
             Guid organizationId, int? page, int? pageSize, HttpContext context,
@@ -60,7 +61,8 @@ public sealed class OrganizationsAdminApiModule : IAdminApiModule
                     organizationId, page ?? PageRequest.DefaultPage,
                     pageSize ?? PageRequest.DefaultPageSize), token),
                 cancellationToken,
-                errorStatusCodes: ErrorStatusCodes).ConfigureAwait(false));
+                errorStatusCodes: ErrorStatusCodes).ConfigureAwait(false))
+            .Produces<OrganizationMemberListResponse>(StatusCodes.Status200OK);
 
         MapLifecycle(group, "suspend", OrganizationLifecycleAction.Suspend, requiresConfirmation: true);
         MapLifecycle(group, "reactivate", OrganizationLifecycleAction.Reactivate, requiresConfirmation: false);
@@ -81,7 +83,8 @@ public sealed class OrganizationsAdminApiModule : IAdminApiModule
                     : Task.FromResult(Result.Failure<OrganizationMembershipSummaryDto>(
                         AdminErrors.ConfirmationRequired)),
                 cancellationToken,
-                errorStatusCodes: ErrorStatusCodes).ConfigureAwait(false));
+                errorStatusCodes: ErrorStatusCodes).ConfigureAwait(false))
+            .Produces<OrganizationMembershipSummaryDto>(StatusCodes.Status200OK);
     }
 
     private static void MapLifecycle(
@@ -103,7 +106,8 @@ public sealed class OrganizationsAdminApiModule : IAdminApiModule
                         organizationId, action, request.ExpectedVersion, ResolveActor(actorContext)), token)
                     : Task.FromResult(Result.Failure<OrganizationDto>(AdminErrors.ConfirmationRequired)),
                 cancellationToken,
-                errorStatusCodes: ErrorStatusCodes).ConfigureAwait(false));
+                errorStatusCodes: ErrorStatusCodes).ConfigureAwait(false))
+            .Produces<OrganizationDto>(StatusCodes.Status200OK);
     }
 
     private static string ResolveActor(IAdminActorContext context) =>

@@ -8,6 +8,7 @@ using Gma.Framework.Pagination;
 using Gma.Modules.Organizations.Api.Requests;
 using Gma.Modules.Organizations.Application.Commands;
 using Gma.Modules.Organizations.Application.Queries;
+using Gma.Modules.Organizations.Contracts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
@@ -29,7 +30,7 @@ internal static class OrganizationEnrollmentEndpoints
                 organizationId, subjectId, page ?? PageRequest.DefaultPage,
                 pageSize ?? PageRequest.DefaultPageSize), token).ConfigureAwait(false))
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationEnrollmentLinkListResponse>(StatusCodes.Status200OK);
 
         organizations.MapPost("/{organizationId:guid}/enrollment-links", async (
             Guid organizationId, CreateOrganizationEnrollmentLinkRequest request,
@@ -44,7 +45,7 @@ internal static class OrganizationEnrollmentEndpoints
                 organizationId, request.LifetimeHours, request.MaximumClaims, request.ApprovalMode,
                 subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationEnrollmentLinkIssuedDto>(StatusCodes.Status200OK);
 
         MapLinkAction(organizations, "disable", OrganizationEnrollmentLinkAction.Disable);
         MapLinkAction(organizations, "rotate", OrganizationEnrollmentLinkAction.Rotate);
@@ -62,7 +63,7 @@ internal static class OrganizationEnrollmentEndpoints
                 organizationId, subjectId, page ?? PageRequest.DefaultPage,
                 pageSize ?? PageRequest.DefaultPageSize), token).ConfigureAwait(false))
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        });
+        }).Produces<OrganizationJoinRequestListResponse>(StatusCodes.Status200OK);
 
         MapJoinRequestDecision(organizations, "approve", OrganizationJoinRequestDecision.Approve);
         MapJoinRequestDecision(organizations, "reject", OrganizationJoinRequestDecision.Reject);
@@ -77,7 +78,8 @@ internal static class OrganizationEnrollmentEndpoints
         enrollment.MapPost("/preview", async (PreviewOrganizationEnrollmentLinkRequest request,
             IRequestDispatcher dispatcher, CancellationToken cancellationToken) =>
             (await dispatcher.QueryAsync(new PreviewOrganizationEnrollmentLinkQuery(request.Token), cancellationToken)
-                .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes));
+                .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes))
+            .Produces<OrganizationEnrollmentPreviewDto>(StatusCodes.Status200OK);
 
         enrollment.MapPost("/claim", async (ClaimOrganizationEnrollmentLinkRequest request,
             HttpContext context, IRequestDispatcher dispatcher, CancellationToken token) =>
@@ -90,7 +92,8 @@ internal static class OrganizationEnrollmentEndpoints
             return (await dispatcher.SendAsync(new ClaimOrganizationEnrollmentLinkCommand(
                 request.Token, subjectId, OrganizationEndpointSupport.Actor(subjectId)), token)
                 .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        }).RequireAuthorization();
+        }).Produces<OrganizationEnrollmentOutcomeDto>(StatusCodes.Status200OK)
+            .RequireAuthorization();
     }
 
     private static void MapLinkAction(
@@ -113,7 +116,7 @@ internal static class OrganizationEnrollmentEndpoints
                     request.ReplacementLifetimeHours, subjectId,
                     OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
                     .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-            });
+            }).Produces<OrganizationEnrollmentLinkMutationDto>(StatusCodes.Status200OK);
     }
 
     private static void MapJoinRequestDecision(
@@ -135,6 +138,6 @@ internal static class OrganizationEnrollmentEndpoints
                     organizationId, claimId, decision, request.ExpectedVersion,
                     subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
                     .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-            });
+            }).Produces<OrganizationEnrollmentOutcomeDto>(StatusCodes.Status200OK);
     }
 }
