@@ -49,6 +49,11 @@ internal sealed class OrganizationsPersistenceRetryBehavior<TCommand, TResponse>
         {
             return await next().ConfigureAwait(false);
         }
+        catch (OptimisticConcurrencyException)
+        {
+            this.dbContext.ChangeTracker.Clear();
+            return await next().ConfigureAwait(false);
+        }
         catch (DbUpdateConcurrencyException)
         {
             this.dbContext.ChangeTracker.Clear();

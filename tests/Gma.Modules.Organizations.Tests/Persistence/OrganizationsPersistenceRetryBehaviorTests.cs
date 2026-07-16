@@ -1,5 +1,6 @@
 namespace Gma.Modules.Organizations.Tests.Persistence;
 
+using Gma.Framework.Cqrs;
 using Gma.Framework.Results;
 using Gma.Modules.Organizations.Application;
 using Gma.Modules.Organizations.Application.Commands;
@@ -50,6 +51,41 @@ public sealed class OrganizationsPersistenceRetryBehaviorTests
             await Task.CompletedTask;
             return Result.Failure<OrganizationMembershipSummaryDto>(
                 OrganizationApplicationErrors.SlugConflict);
+        }
+
+        Result<OrganizationMembershipSummaryDto> result = await behavior.HandleAsync(
+            command, Next, CancellationToken.None);
+
+        Assert.Equal(2, attempts);
+        Assert.Equal(OrganizationApplicationErrors.SlugConflict, result.Error);
+    }
+
+    [Fact]
+    public async Task Translated_concurrency_conflict_clears_tracking_and_reexecutes_once()
+    {
+        DbContextOptions<OrganizationsDbContext> options =
+            new DbContextOptionsBuilder<OrganizationsDbContext>()
+                .UseInMemoryDatabase(Guid.NewGuid().ToString("N"))
+                .Options;
+        await using OrganizationsDbContext dbContext = new(options);
+        OrganizationsPersistenceRetryBehavior<CreateOrganizationCommand, OrganizationMembershipSummaryDto> behavior =
+            new(dbContext, _ => false);
+        CreateOrganizationCommand command = new(
+            "Harbor House", "harbor-house", "member-a", "user:member-a");
+        int attempts = 0;
+
+        Task<Result<OrganizationMembershipSummaryDto>> Next()
+        {
+            attempts++;
+            if (attempts == 1)
+            {
+                throw new OptimisticConcurrencyException(
+                    OrganizationsModuleMetadata.Name,
+                    new DbUpdateConcurrencyException("simulated concurrency conflict"));
+            }
+
+            return Task.FromResult(Result.Failure<OrganizationMembershipSummaryDto>(
+                OrganizationApplicationErrors.SlugConflict));
         }
 
         Result<OrganizationMembershipSummaryDto> result = await behavior.HandleAsync(
