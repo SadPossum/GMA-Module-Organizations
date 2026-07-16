@@ -1,6 +1,8 @@
 ﻿namespace Gma.Modules.Organizations.Persistence;
 
 using Gma.Framework.Cqrs.UnitOfWork;
+using Gma.Framework.Cqrs;
+using Gma.Framework.Cqrs.Infrastructure;
 using Gma.Framework.Messaging;
 using Gma.Framework.Persistence.EntityFrameworkCore;
 using Gma.Modules.Organizations.Application.Ports;
@@ -30,6 +32,10 @@ public static class DependencyInjection
         builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<IOutboxStore, OrganizationsOutboxStore>());
         builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<IInboxStore, OrganizationsInboxStore>());
         builder.Services.TryAddScoped<IOrganizationRepository, OrganizationRepository>();
+        builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped(
+            typeof(ICommandPipelineBehavior<,>),
+            typeof(OrganizationsPersistenceRetryBehavior<,>)));
+        builder.Services.MoveCommandUnitOfWorkBehaviorToEnd();
 
         return builder;
     }

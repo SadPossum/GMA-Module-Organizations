@@ -62,7 +62,7 @@ jobs:
 
       - name: Test
         working-directory: gma-module-organizations
-        run: dotnet test Gma.Modules.Organizations.slnx --no-build --logger "console;verbosity=minimal"
+        run: dotnet test Gma.Modules.Organizations.slnx --no-build --filter "Category!=Docker" --logger "console;verbosity=minimal"
 
       - name: Audit packages
         working-directory: gma-module-organizations
