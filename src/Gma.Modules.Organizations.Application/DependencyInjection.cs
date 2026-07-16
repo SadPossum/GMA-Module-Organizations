@@ -1,7 +1,6 @@
 ﻿namespace Gma.Modules.Organizations.Application;
 
 using Gma.Framework.Application.Composition;
-using Gma.Modules.Organizations.Application.Access;
 using Gma.Modules.Organizations.Application.Policies;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Application.Security;
@@ -31,7 +30,6 @@ public static class DependencyInjection
 
         services.TryAddScoped<IOrganizationAdmissionPolicy, DefaultOrganizationAdmissionPolicy>();
         services.TryAddScoped<IOrganizationInvitationAdmissionPolicy, DefaultOrganizationInvitationAdmissionPolicy>();
-        services.TryAddScoped<IOrganizationAccessDecisionReader, OrganizationAccessDecisionReader>();
         services.TryAddSingleton<IOrganizationInvitationTokenService, OrganizationInvitationTokenService>();
         services.TryAddSingleton<IOrganizationEnrollmentTokenService, OrganizationEnrollmentTokenService>();
         services.AddApplicationServicesFromAssembly(typeof(DependencyInjection).Assembly);

@@ -1,12 +1,11 @@
-namespace Gma.Modules.Organizations.Tests.Application;
+namespace Gma.Modules.Organizations.Tests.Persistence;
 
-using Gma.Modules.Organizations.Application;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
-using Gma.Modules.Organizations.Tests.Support;
-using Microsoft.Extensions.Configuration;
-using Microsoft.Extensions.DependencyInjection;
+using Gma.Modules.Organizations.Persistence;
+using Gma.Modules.Organizations.Persistence.Access;
+using Microsoft.EntityFrameworkCore;
 using Xunit;
 
 [Trait("Category", "Unit")]
@@ -23,10 +22,10 @@ public sealed class OrganizationAccessDecisionReaderTests
         OrganizationMembership membership = OrganizationMembership.Create(
             Guid.NewGuid(), organizationId, "member-a", OrganizationMembershipRole.Member,
             "user:owner", Guid.NewGuid(), Now).Value;
-        TestOrganizationRepository repository = new(organization, membership);
-        using ServiceProvider services = CreateServices(repository);
-        IOrganizationAccessDecisionReader reader =
-            services.GetRequiredService<IOrganizationAccessDecisionReader>();
+        await using OrganizationsDbContext dbContext = CreateDbContext();
+        dbContext.AddRange(organization, membership);
+        await dbContext.SaveChangesAsync();
+        OrganizationAccessDecisionReader reader = new(dbContext);
 
         Assert.Equal(
             OrganizationAccessDecision.Allowed,
@@ -37,12 +36,14 @@ public sealed class OrganizationAccessDecisionReaderTests
 
         Assert.True(membership.Suspend(
             membership.Version, "user:owner", Guid.NewGuid(), Now.AddMinutes(1)).IsSuccess);
+        await dbContext.SaveChangesAsync();
         Assert.Equal(
             OrganizationAccessDecision.MembershipInactive,
             await reader.ReadAsync(organizationId, "member-a", CancellationToken.None));
 
         Assert.True(organization.Suspend(
             organization.Version, "user:owner", Guid.NewGuid(), Now.AddMinutes(2)).IsSuccess);
+        await dbContext.SaveChangesAsync();
         Assert.Equal(
             OrganizationAccessDecision.OrganizationInactive,
             await reader.ReadAsync(organizationId, "member-a", CancellationToken.None));
@@ -51,11 +52,12 @@ public sealed class OrganizationAccessDecisionReaderTests
             await reader.ReadAsync(Guid.NewGuid(), "member-a", CancellationToken.None));
     }
 
-    private static ServiceProvider CreateServices(IOrganizationRepository repository)
+    private static OrganizationsDbContext CreateDbContext()
     {
-        ServiceCollection services = new();
-        services.AddOrganizationsApplication(new ConfigurationBuilder().Build());
-        services.AddSingleton(repository);
-        return services.BuildServiceProvider();
+        DbContextOptions<OrganizationsDbContext> options =
+            new DbContextOptionsBuilder<OrganizationsDbContext>()
+                .UseInMemoryDatabase($"organizations-access-{Guid.NewGuid():N}")
+                .Options;
+        return new OrganizationsDbContext(options);
     }
 }

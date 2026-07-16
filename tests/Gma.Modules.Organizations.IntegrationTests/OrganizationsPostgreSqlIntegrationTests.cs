@@ -1,11 +1,15 @@
 namespace Gma.Modules.Organizations.IntegrationTests;
 
+using System.Data.Common;
+using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
 using Gma.Modules.Organizations.IntegrationTests.Support;
 using Gma.Modules.Organizations.Persistence;
+using Gma.Modules.Organizations.Persistence.Access;
 using Gma.Modules.Organizations.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Diagnostics;
 using Testcontainers.PostgreSql;
 using Xunit;
 
@@ -70,6 +74,49 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
         Assert.Null(scoped);
     }
 
+    [DockerFact]
+    public async Task Access_decisions_use_one_query_and_observe_membership_revocation()
+    {
+        await using PostgreSqlContainer postgreSql = CreatePostgreSql("organizations_access_tests");
+        await postgreSql.StartAsync();
+        string connectionString = postgreSql.GetConnectionString();
+        Organization organization = CreateOrganization("Harbor House", "harbor-house");
+        OrganizationMembership membership = CreateMembership(organization.Id, "subject-a");
+        await using (OrganizationsDbContext seed = CreateDbContext(connectionString))
+        {
+            await seed.Database.MigrateAsync();
+            seed.AddRange(organization, membership);
+            await seed.SaveChangesAsync();
+        }
+
+        CountingCommandInterceptor commands = new();
+        await using OrganizationsDbContext readerContext = CreateDbContext(connectionString, commands);
+        OrganizationAccessDecisionReader reader = new(readerContext);
+
+        Assert.Equal(
+            OrganizationAccessDecision.Allowed,
+            await reader.ReadAsync(organization.Id, "subject-a", CancellationToken.None));
+        Assert.Equal(1, commands.ReaderCommands);
+        Assert.Empty(readerContext.ChangeTracker.Entries());
+
+        await using (OrganizationsDbContext writer = CreateDbContext(connectionString))
+        {
+            OrganizationMembership storedMembership = await writer.Memberships.SingleAsync();
+            Assert.True(storedMembership.Suspend(
+                storedMembership.Version,
+                "user:owner",
+                Guid.NewGuid(),
+                Now.AddMinutes(1)).IsSuccess);
+            await writer.SaveChangesAsync();
+        }
+
+        Assert.Equal(
+            OrganizationAccessDecision.MembershipInactive,
+            await reader.ReadAsync(organization.Id, "subject-a", CancellationToken.None));
+        Assert.Equal(2, commands.ReaderCommands);
+        Assert.Empty(readerContext.ChangeTracker.Entries());
+    }
+
     private static async Task<(Organization Organization, OrganizationEnrollmentLink Link)> SeedEnrollmentAsync(
         string connectionString,
         int maximumClaims)
@@ -105,17 +152,23 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
             Guid.NewGuid(), organizationId, subjectId, OrganizationMembershipRole.Member,
             "user:owner", Guid.NewGuid(), Now).Value;
 
-    private static OrganizationsDbContext CreateDbContext(string connectionString)
+    private static OrganizationsDbContext CreateDbContext(
+        string connectionString,
+        IInterceptor? interceptor = null)
     {
-        DbContextOptions<OrganizationsDbContext> options =
+        DbContextOptionsBuilder<OrganizationsDbContext> builder =
             new DbContextOptionsBuilder<OrganizationsDbContext>()
                 .UseNpgsql(connectionString, provider => provider
                     .MigrationsAssembly(OrganizationsMigrations.PostgreSqlAssembly)
                     .MigrationsHistoryTable(
                         OrganizationsMigrations.HistoryTable,
-                        OrganizationsMigrations.Schema))
-                .Options;
-        return new OrganizationsDbContext(options);
+                        OrganizationsMigrations.Schema));
+        if (interceptor is not null)
+        {
+            builder.AddInterceptors(interceptor);
+        }
+
+        return new OrganizationsDbContext(builder.Options);
     }
 
     private static PostgreSqlContainer CreatePostgreSql(string database) =>
@@ -131,6 +184,21 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
         catch (Exception exception)
         {
             return exception;
+        }
+    }
+
+    private sealed class CountingCommandInterceptor : DbCommandInterceptor
+    {
+        public int ReaderCommands { get; private set; }
+
+        public override ValueTask<InterceptionResult<DbDataReader>> ReaderExecutingAsync(
+            DbCommand command,
+            CommandEventData eventData,
+            InterceptionResult<DbDataReader> result,
+            CancellationToken cancellationToken = default)
+        {
+            this.ReaderCommands++;
+            return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
     }
 }

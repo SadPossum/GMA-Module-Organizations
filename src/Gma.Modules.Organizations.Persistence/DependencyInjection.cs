@@ -6,6 +6,7 @@ using Gma.Framework.Cqrs.Infrastructure;
 using Gma.Framework.Messaging;
 using Gma.Framework.Persistence.EntityFrameworkCore;
 using Gma.Modules.Organizations.Application.Ports;
+using Gma.Modules.Organizations.Persistence.Access;
 using Gma.Modules.Organizations.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection.Extensions;
@@ -31,6 +32,7 @@ public static class DependencyInjection
         builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<IOutboxWriter, OrganizationsOutboxWriter>());
         builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<IOutboxStore, OrganizationsOutboxStore>());
         builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<IInboxStore, OrganizationsInboxStore>());
+        builder.Services.TryAddScoped<IOrganizationAccessDecisionReader, OrganizationAccessDecisionReader>();
         builder.Services.TryAddScoped<IOrganizationRepository, OrganizationRepository>();
         builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped(
             typeof(ICommandPipelineBehavior<,>),
