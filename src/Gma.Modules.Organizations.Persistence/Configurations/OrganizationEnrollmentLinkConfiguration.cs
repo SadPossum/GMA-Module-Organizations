@@ -32,6 +32,7 @@ internal sealed class OrganizationEnrollmentLinkConfiguration
         builder.HasIndex(link => link.TokenDigest).IsUnique();
         builder.HasIndex(link => new { link.OrganizationId, link.Status, link.CreatedAtUtc });
         builder.HasIndex(link => new { link.Status, link.ExpiresAtUtc });
+        builder.HasIndex(link => new { link.Status, link.LastChangedAtUtc });
         builder.HasOne<Organization>()
             .WithMany()
             .HasForeignKey(link => link.OrganizationId)

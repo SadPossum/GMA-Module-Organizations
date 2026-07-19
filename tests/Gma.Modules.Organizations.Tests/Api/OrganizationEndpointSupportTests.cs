@@ -26,4 +26,15 @@ public sealed class OrganizationEndpointSupportTests
         Assert.True(resolved);
         Assert.Equal("member-1", subjectId);
     }
+
+    [Fact]
+    public void Sensitive_organization_responses_disable_caching()
+    {
+        DefaultHttpContext context = new();
+
+        OrganizationEndpointSupport.SetNoStoreHeaders(context);
+
+        Assert.Equal("no-store", context.Response.Headers.CacheControl);
+        Assert.Equal("no-cache", context.Response.Headers.Pragma);
+    }
 }

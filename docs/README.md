@@ -7,6 +7,8 @@ Organizations is intentionally independent from Auth, Tenancy, AccessControl, No
 The organization id is the immutable technical scope id. A mutable slug is only a routing and display aid. Membership proves belonging but grants no product permission by itself.
 
 Implementation direction and acceptance criteria are tracked in [Organizations Task](organizations-task.md).
+The remaining production hardening work is tracked in
+[Organizations Production Hardening Task](organizations-production-hardening-task.md).
 
 ## Owned behavior
 
@@ -34,7 +36,15 @@ The administration surface lives under `/api/admin/organizations` and uses globa
     "InvitationMaxLifetimeHours": 720,
     "EnrollmentDefaultLifetimeHours": 24,
     "EnrollmentMaxLifetimeHours": 720,
-    "EnrollmentMaxClaims": 1000
+    "EnrollmentMaxClaims": 1000,
+    "Retention": {
+      "Enabled": false,
+      "InvitationHistoryDays": 90,
+      "EnrollmentHistoryDays": 90,
+      "BatchSize": 500,
+      "MaxBatchesPerCategoryPerCycle": 4,
+      "IntervalMinutes": 60
+    }
   }
 }
 ```
@@ -44,5 +54,7 @@ Recipient-bound invitations fail closed unless a host or extension replaces `IOr
 ## Operations
 
 Token plaintext is returned once at issuance; only purpose-separated SHA-256 digests are persisted. All mutable aggregates carry optimistic versions, persistence uses a durable outbox, and PostgreSQL container tests prove bounded-claim concurrency and organization/subject isolation.
+
+Domain retention is disabled by default and should be enabled deliberately on a host responsible for Organizations maintenance. Cleanup is bounded and removes only old expired or terminal invitations, resolved claims whose parent link is terminal, and terminal links with no remaining claims. Pending join requests, organizations, memberships, active links, and message-journal recovery records are preserved.
 
 Run `eng/verify.ps1` for boundaries, build, migration drift, unit tests, vulnerability audit, and PostgreSQL tests. Use `-SkipDocker` only when container tests are intentionally unavailable.

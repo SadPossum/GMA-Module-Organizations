@@ -196,6 +196,7 @@ internal static class OrganizationEndpoints
             CreateOrganizationInvitationRequest request, HttpContext context,
             IRequestDispatcher dispatcher, CancellationToken token) =>
         {
+            OrganizationEndpointSupport.SetNoStoreHeaders(context);
             if (!OrganizationEndpointSupport.TryGetSubject(context, out string subjectId))
             {
                 return Results.Unauthorized();
@@ -226,6 +227,7 @@ internal static class OrganizationEndpoints
             Guid organizationId, Guid invitationId, ReissueOrganizationInvitationRequest request,
             HttpContext context, IRequestDispatcher dispatcher, CancellationToken token) =>
         {
+            OrganizationEndpointSupport.SetNoStoreHeaders(context);
             if (!OrganizationEndpointSupport.TryGetSubject(context, out string subjectId))
             {
                 return Results.Unauthorized();
@@ -245,14 +247,19 @@ internal static class OrganizationEndpoints
             .WithTags("Organization Invitations");
 
         invitations.MapPost("/preview", async (PreviewOrganizationInvitationRequest request,
-            IRequestDispatcher dispatcher, CancellationToken cancellationToken) =>
-            (await dispatcher.QueryAsync(new PreviewOrganizationInvitationQuery(request.Token), cancellationToken)
-                .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes))
+            HttpContext context, IRequestDispatcher dispatcher, CancellationToken cancellationToken) =>
+        {
+            OrganizationEndpointSupport.SetNoStoreHeaders(context);
+            return (await dispatcher.QueryAsync(
+                new PreviewOrganizationInvitationQuery(request.Token), cancellationToken)
+                .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
+        })
             .Produces<OrganizationInvitationPreviewDto>(StatusCodes.Status200OK);
 
         invitations.MapPost("/accept", async (AcceptOrganizationInvitationRequest request,
             HttpContext context, IRequestDispatcher dispatcher, CancellationToken token) =>
         {
+            OrganizationEndpointSupport.SetNoStoreHeaders(context);
             if (!OrganizationEndpointSupport.TryGetSubject(context, out string subjectId))
             {
                 return Results.Unauthorized();

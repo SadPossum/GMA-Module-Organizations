@@ -39,6 +39,7 @@ internal sealed class OrganizationInvitationConfiguration : IEntityTypeConfigura
             invitation.CreatedAtUtc
         });
         builder.HasIndex(invitation => new { invitation.Status, invitation.ExpiresAtUtc });
+        builder.HasIndex(invitation => new { invitation.Status, invitation.LastChangedAtUtc });
         builder.HasOne<Organization>()
             .WithMany()
             .HasForeignKey(invitation => invitation.OrganizationId)

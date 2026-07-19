@@ -10,6 +10,9 @@ using Gma.Modules.Organizations.Persistence.Access;
 using Gma.Modules.Organizations.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
+using Microsoft.Extensions.DependencyInjection;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Testcontainers.PostgreSql;
 using Xunit;
 
@@ -117,6 +120,81 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
         Assert.Empty(readerContext.ChangeTracker.Entries());
     }
 
+    [DockerFact]
+    public async Task Retention_removes_terminal_history_but_preserves_pending_join_requests()
+    {
+        await using PostgreSqlContainer postgreSql = CreatePostgreSql("organizations_retention_tests");
+        await postgreSql.StartAsync();
+        string connectionString = postgreSql.GetConnectionString();
+        Organization organization = CreateOrganization("Retention House", "retention-house");
+        OrganizationMembership membership = CreateMembership(organization.Id, "accepted-subject");
+        DateTimeOffset oldCreatedAtUtc = Now.AddDays(-30);
+        DateTimeOffset oldExpiryUtc = Now.AddDays(-20);
+        DateTimeOffset recentExpiryUtc = Now.AddDays(-1);
+        OrganizationInvitation oldInvitation = OrganizationInvitation.Create(
+            Guid.NewGuid(), organization.Id, "owner", "old@example.test", new string('a', 64),
+            oldExpiryUtc, "user:owner", Guid.NewGuid(), oldCreatedAtUtc).Value;
+        OrganizationInvitation recentInvitation = OrganizationInvitation.Create(
+            Guid.NewGuid(), organization.Id, "owner", "recent@example.test", new string('b', 64),
+            recentExpiryUtc, "user:owner", Guid.NewGuid(), Now.AddDays(-2)).Value;
+        OrganizationEnrollmentLink resolvedLink = OrganizationEnrollmentLink.Create(
+            Guid.NewGuid(), organization.Id, "owner", new string('c', 64), oldExpiryUtc, 10,
+            OrganizationEnrollmentApprovalMode.Automatic,
+            "user:owner", Guid.NewGuid(), oldCreatedAtUtc).Value;
+        Assert.True(resolvedLink.ReserveClaim(
+            "user:accepted-subject", Guid.NewGuid(), oldCreatedAtUtc.AddHours(1)).IsSuccess);
+        OrganizationEnrollmentClaim acceptedClaim = OrganizationEnrollmentClaim.Create(
+            Guid.NewGuid(), organization.Id, resolvedLink.Id, "accepted-subject",
+            OrganizationEnrollmentClaimState.Accepted, membership.Id,
+            "user:accepted-subject", Guid.NewGuid(), oldCreatedAtUtc.AddHours(1)).Value;
+        OrganizationEnrollmentLink pendingLink = OrganizationEnrollmentLink.Create(
+            Guid.NewGuid(), organization.Id, "owner", new string('d', 64), oldExpiryUtc, 10,
+            OrganizationEnrollmentApprovalMode.RequiresApproval,
+            "user:owner", Guid.NewGuid(), oldCreatedAtUtc).Value;
+        Assert.True(pendingLink.ReserveClaim(
+            "user:pending-subject", Guid.NewGuid(), oldCreatedAtUtc.AddHours(1)).IsSuccess);
+        OrganizationEnrollmentClaim pendingClaim = CreatePendingClaim(
+            organization.Id, pendingLink.Id, "pending-subject", oldCreatedAtUtc.AddHours(1));
+
+        await using (OrganizationsDbContext seed = CreateDbContext(connectionString))
+        {
+            await seed.Database.MigrateAsync();
+            seed.AddRange(
+                organization, membership, oldInvitation, recentInvitation,
+                resolvedLink, acceptedClaim, pendingLink, pendingClaim);
+            await seed.SaveChangesAsync();
+        }
+
+        ServiceCollection services = new();
+        services.AddScoped(_ => CreateDbContext(connectionString));
+        await using ServiceProvider provider = services.BuildServiceProvider();
+        OrganizationsRetentionService retention = new(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new FixedClock(Now),
+            Options.Create(new OrganizationsRetentionOptions
+            {
+                Enabled = true,
+                InvitationHistoryDays = 7,
+                EnrollmentHistoryDays = 7,
+                BatchSize = 1,
+                MaxBatchesPerCategoryPerCycle = 10,
+                IntervalMinutes = 60
+            }),
+            NullLogger<OrganizationsRetentionService>.Instance);
+
+        await retention.CleanupAsync(CancellationToken.None);
+
+        await using OrganizationsDbContext verification = CreateDbContext(connectionString);
+        Assert.DoesNotContain(await verification.Invitations.ToArrayAsync(), item => item.Id == oldInvitation.Id);
+        Assert.Contains(await verification.Invitations.ToArrayAsync(), item => item.Id == recentInvitation.Id);
+        Assert.DoesNotContain(await verification.EnrollmentClaims.ToArrayAsync(), item => item.Id == acceptedClaim.Id);
+        Assert.DoesNotContain(await verification.EnrollmentLinks.ToArrayAsync(), item => item.Id == resolvedLink.Id);
+        Assert.Contains(await verification.EnrollmentClaims.ToArrayAsync(), item => item.Id == pendingClaim.Id);
+        Assert.Contains(await verification.EnrollmentLinks.ToArrayAsync(), item => item.Id == pendingLink.Id);
+        Assert.Single(await verification.Memberships.ToArrayAsync());
+        Assert.Single(await verification.Organizations.ToArrayAsync());
+    }
+
     private static async Task<(Organization Organization, OrganizationEnrollmentLink Link)> SeedEnrollmentAsync(
         string connectionString,
         int maximumClaims)
@@ -139,10 +217,11 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
     private static OrganizationEnrollmentClaim CreatePendingClaim(
         Guid organizationId,
         Guid linkId,
-        string subjectId) => OrganizationEnrollmentClaim.Create(
+        string subjectId,
+        DateTimeOffset? createdAtUtc = null) => OrganizationEnrollmentClaim.Create(
             Guid.NewGuid(), organizationId, linkId, subjectId,
             OrganizationEnrollmentClaimState.Pending, null,
-            $"user:{subjectId}", Guid.NewGuid(), Now.AddMinutes(1)).Value;
+            $"user:{subjectId}", Guid.NewGuid(), createdAtUtc ?? Now.AddMinutes(1)).Value;
 
     private static Organization CreateOrganization(string name, string slug) => Organization.Create(
         Guid.NewGuid(), name, slug, "user:owner", Guid.NewGuid(), Now).Value;
@@ -200,5 +279,10 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
             this.ReaderCommands++;
             return base.ReaderExecutingAsync(command, eventData, result, cancellationToken);
         }
+    }
+
+    private sealed class FixedClock(DateTimeOffset utcNow) : Gma.Framework.Runtime.Time.ISystemClock
+    {
+        public DateTimeOffset UtcNow { get; } = utcNow;
     }
 }

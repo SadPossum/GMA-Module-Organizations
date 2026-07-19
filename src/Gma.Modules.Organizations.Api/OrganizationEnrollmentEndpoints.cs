@@ -36,6 +36,7 @@ internal static class OrganizationEnrollmentEndpoints
             Guid organizationId, CreateOrganizationEnrollmentLinkRequest request,
             HttpContext context, IRequestDispatcher dispatcher, CancellationToken token) =>
         {
+            OrganizationEndpointSupport.SetNoStoreHeaders(context);
             if (!OrganizationEndpointSupport.TryGetSubject(context, out string subjectId))
             {
                 return Results.Unauthorized();
@@ -76,14 +77,19 @@ internal static class OrganizationEnrollmentEndpoints
             .WithTags("Organization Enrollment");
 
         enrollment.MapPost("/preview", async (PreviewOrganizationEnrollmentLinkRequest request,
-            IRequestDispatcher dispatcher, CancellationToken cancellationToken) =>
-            (await dispatcher.QueryAsync(new PreviewOrganizationEnrollmentLinkQuery(request.Token), cancellationToken)
-                .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes))
+            HttpContext context, IRequestDispatcher dispatcher, CancellationToken cancellationToken) =>
+        {
+            OrganizationEndpointSupport.SetNoStoreHeaders(context);
+            return (await dispatcher.QueryAsync(
+                new PreviewOrganizationEnrollmentLinkQuery(request.Token), cancellationToken)
+                .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
+        })
             .Produces<OrganizationEnrollmentPreviewDto>(StatusCodes.Status200OK);
 
         enrollment.MapPost("/claim", async (ClaimOrganizationEnrollmentLinkRequest request,
             HttpContext context, IRequestDispatcher dispatcher, CancellationToken token) =>
         {
+            OrganizationEndpointSupport.SetNoStoreHeaders(context);
             if (!OrganizationEndpointSupport.TryGetSubject(context, out string subjectId))
             {
                 return Results.Unauthorized();
@@ -106,6 +112,7 @@ internal static class OrganizationEnrollmentEndpoints
                 ChangeOrganizationEnrollmentLinkRequest request, HttpContext context,
                 IRequestDispatcher dispatcher, CancellationToken token) =>
             {
+                OrganizationEndpointSupport.SetNoStoreHeaders(context);
                 if (!OrganizationEndpointSupport.TryGetSubject(context, out string subjectId))
                 {
                     return Results.Unauthorized();

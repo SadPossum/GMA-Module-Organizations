@@ -46,4 +46,10 @@ internal static class OrganizationEndpointSupport
     }
 
     public static string Actor(string subjectId) => $"user:{subjectId}";
+
+    public static void SetNoStoreHeaders(HttpContext context)
+    {
+        context.Response.Headers.CacheControl = "no-store";
+        context.Response.Headers.Pragma = "no-cache";
+    }
 }

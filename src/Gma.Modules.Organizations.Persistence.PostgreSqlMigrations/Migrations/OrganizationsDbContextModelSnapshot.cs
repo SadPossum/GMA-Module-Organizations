@@ -315,6 +315,8 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
 
                     b.HasIndex("Status", "ExpiresAtUtc");
 
+                    b.HasIndex("Status", "LastChangedAtUtc");
+
                     b.HasIndex("OrganizationId", "Status", "CreatedAtUtc");
 
                     b.ToTable("organization_enrollment_links", "organizations");
@@ -389,6 +391,8 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
                         .IsUnique();
 
                     b.HasIndex("Status", "ExpiresAtUtc");
+
+                    b.HasIndex("Status", "LastChangedAtUtc");
 
                     b.HasIndex("OrganizationId", "Status", "CreatedAtUtc");
 

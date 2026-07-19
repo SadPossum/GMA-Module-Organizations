@@ -9,9 +9,11 @@ using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Persistence.Access;
 using Gma.Modules.Organizations.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection.Extensions;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
 public static class DependencyInjection
 {
     public static IHostApplicationBuilder AddOrganizationsPersistence(this IHostApplicationBuilder builder)
@@ -19,6 +21,26 @@ public static class DependencyInjection
         ArgumentNullException.ThrowIfNull(builder);
 
         builder.Services.AddPersistenceOptions(builder.Configuration);
+        OrganizationsRetentionOptions retentionOptions = builder.Configuration
+            .GetSection(OrganizationsRetentionOptions.SectionName)
+            .Get<OrganizationsRetentionOptions>() ?? new();
+        ValidateOptionsResult retentionValidation = new OrganizationsRetentionOptionsValidator()
+            .Validate(name: null, retentionOptions);
+        if (retentionValidation.Failed)
+        {
+            throw new OptionsValidationException(
+                OrganizationsRetentionOptions.SectionName,
+                typeof(OrganizationsRetentionOptions),
+                retentionValidation.Failures);
+        }
+
+        builder.Services
+            .AddOptions<OrganizationsRetentionOptions>()
+            .Bind(builder.Configuration.GetSection(OrganizationsRetentionOptions.SectionName))
+            .ValidateOnStart();
+        builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<
+            IValidateOptions<OrganizationsRetentionOptions>,
+            OrganizationsRetentionOptionsValidator>());
 
         builder.Services.TryAddModuleDbContext<OrganizationsDbContext>(options =>
             options.UseConfiguredProvider(
@@ -38,6 +60,12 @@ public static class DependencyInjection
             typeof(ICommandPipelineBehavior<,>),
             typeof(OrganizationsPersistenceRetryBehavior<,>)));
         builder.Services.MoveCommandUnitOfWorkBehaviorToEnd();
+
+        if (retentionOptions.Enabled)
+        {
+            builder.Services.TryAddEnumerable(
+                ServiceDescriptor.Singleton<IHostedService, OrganizationsRetentionService>());
+        }
 
         return builder;
     }
