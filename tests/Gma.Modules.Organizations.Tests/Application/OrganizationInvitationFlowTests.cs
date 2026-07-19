@@ -121,6 +121,45 @@ public sealed class OrganizationInvitationFlowTests
         Assert.DoesNotContain(repository.Memberships, membership => membership.SubjectId == "member");
     }
 
+    [Fact]
+    public async Task Suspended_organization_blocks_reissue_but_allows_revocation()
+    {
+        TestRepository repository = CreateRepository();
+        TestClock clock = new();
+        using ServiceProvider services = CreateServices(repository, clock);
+        var create = services.GetRequiredService<
+            ICommandHandler<CreateOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
+        var reissue = services.GetRequiredService<
+            ICommandHandler<ReissueOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
+        var revoke = services.GetRequiredService<
+            ICommandHandler<RevokeOrganizationInvitationCommand, OrganizationInvitationDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationInvitationIssuedDto issued = (await create.HandleAsync(
+            new CreateOrganizationInvitationCommand(
+                organization.Id, null, 24, "owner", "user:owner"),
+            CancellationToken.None)).Value;
+        clock.UtcNow = Now.AddMinutes(1);
+        Assert.True(organization.Suspend(
+            organization.Version, "user:owner", Guid.NewGuid(), clock.UtcNow).IsSuccess);
+
+        Result<OrganizationInvitationIssuedDto> replacement = await reissue.HandleAsync(
+            new ReissueOrganizationInvitationCommand(
+                organization.Id, issued.Invitation.InvitationId, issued.Invitation.Version,
+                24, "owner", "user:owner"),
+            CancellationToken.None);
+        Result<OrganizationInvitationDto> revoked = await revoke.HandleAsync(
+            new RevokeOrganizationInvitationCommand(
+                organization.Id, issued.Invitation.InvitationId, issued.Invitation.Version,
+                "owner", "user:owner"),
+            CancellationToken.None);
+
+        Assert.True(replacement.IsFailure);
+        Assert.Equal(OrganizationDomainErrors.OrganizationNotActive, replacement.Error);
+        Assert.True(revoked.IsSuccess);
+        Assert.Single(repository.Invitations);
+        Assert.Equal(OrganizationInvitationStatus.Revoked, revoked.Value.Status);
+    }
+
     private static TestRepository CreateRepository()
     {
         Organization organization = Organization.Create(

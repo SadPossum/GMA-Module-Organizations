@@ -10,6 +10,7 @@ using Gma.Modules.Organizations.Application.Policies;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
+using Gma.Modules.Organizations.Domain.Enums;
 using Microsoft.Extensions.Options;
 
 internal sealed class ReissueOrganizationInvitationCommandHandler(
@@ -35,6 +36,15 @@ internal sealed class ReissueOrganizationInvitationCommandHandler(
         if (existing is null)
         {
             return Result.Failure<OrganizationInvitationIssuedDto>(OrganizationApplicationErrors.InvitationNotFound);
+        }
+
+        Organization? organization = await organizations.GetOrganizationAsync(
+            command.OrganizationId, cancellationToken).ConfigureAwait(false);
+        if (organization is not { Status: OrganizationState.Active })
+        {
+            return Result.Failure<OrganizationInvitationIssuedDto>(
+                organization is null ? OrganizationApplicationErrors.OrganizationNotFound :
+                Gma.Modules.Organizations.Domain.Errors.OrganizationDomainErrors.OrganizationNotActive);
         }
 
         Result<int> lifetime = OrganizationInvitationHandlerSupport.ResolveLifetimeHours(command.LifetimeHours, options);

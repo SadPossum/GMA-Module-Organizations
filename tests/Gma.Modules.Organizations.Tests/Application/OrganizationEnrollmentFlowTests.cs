@@ -148,6 +148,40 @@ public sealed class OrganizationEnrollmentFlowTests
         Assert.Equal(1, Assert.Single(repository.EnrollmentLinks).ReservedClaims);
     }
 
+    [Fact]
+    public async Task Archived_organization_blocks_rotation_but_allows_link_disablement()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        TestClock clock = new(Now);
+        using ServiceProvider services = CreateServices(repository, clock);
+        OrganizationEnrollmentLinkIssuedDto issued = await IssueAsync(
+            services, repository, OrganizationEnrollmentApprovalMode.Automatic, maximumClaims: 2);
+        var change = services.GetRequiredService<
+            ICommandHandler<ChangeOrganizationEnrollmentLinkCommand, OrganizationEnrollmentLinkMutationDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationEnrollmentLink link = Assert.Single(repository.EnrollmentLinks);
+        clock.UtcNow = Now.AddMinutes(1);
+        Assert.True(organization.Suspend(
+            organization.Version, "user:owner", Guid.NewGuid(), clock.UtcNow).IsSuccess);
+        clock.UtcNow = Now.AddMinutes(2);
+        Assert.True(organization.Archive(
+            organization.Version, "user:owner", Guid.NewGuid(), clock.UtcNow).IsSuccess);
+
+        var replacement = await change.HandleAsync(new ChangeOrganizationEnrollmentLinkCommand(
+            organization.Id, link.Id, OrganizationEnrollmentLinkAction.Rotate,
+            issued.EnrollmentLink.Version, 24, "owner", "user:owner"), CancellationToken.None);
+        var disabled = await change.HandleAsync(new ChangeOrganizationEnrollmentLinkCommand(
+            organization.Id, link.Id, OrganizationEnrollmentLinkAction.Disable,
+            issued.EnrollmentLink.Version, null, "owner", "user:owner"), CancellationToken.None);
+
+        Assert.True(replacement.IsFailure);
+        Assert.Equal(OrganizationDomainErrors.OrganizationNotActive, replacement.Error);
+        Assert.True(disabled.IsSuccess);
+        Assert.Single(repository.EnrollmentLinks);
+        Assert.Null(disabled.Value.ReplacementToken);
+        Assert.Equal(OrganizationEnrollmentLinkStatus.Disabled, disabled.Value.EnrollmentLink.Status);
+    }
+
     private static async Task<OrganizationEnrollmentLinkIssuedDto> IssueAsync(
         ServiceProvider services,
         TestOrganizationRepository repository,

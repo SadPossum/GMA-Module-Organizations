@@ -10,6 +10,7 @@ using Gma.Modules.Organizations.Application.Policies;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
+using Gma.Modules.Organizations.Domain.Enums;
 using Microsoft.Extensions.Options;
 
 internal sealed class ChangeOrganizationEnrollmentLinkCommandHandler(
@@ -49,6 +50,15 @@ internal sealed class ChangeOrganizationEnrollmentLinkCommandHandler(
         if (command.Action != OrganizationEnrollmentLinkAction.Rotate)
         {
             return Result.Failure<OrganizationEnrollmentLinkMutationDto>(OrganizationApplicationErrors.EnrollmentLinkNotFound);
+        }
+
+        Organization? organization = await organizations.GetOrganizationAsync(
+            command.OrganizationId, cancellationToken).ConfigureAwait(false);
+        if (organization is not { Status: OrganizationState.Active })
+        {
+            return Result.Failure<OrganizationEnrollmentLinkMutationDto>(
+                organization is null ? OrganizationApplicationErrors.OrganizationNotFound :
+                Gma.Modules.Organizations.Domain.Errors.OrganizationDomainErrors.OrganizationNotActive);
         }
 
         Result<int> lifetime = OrganizationEnrollmentHandlerSupport.ResolveLifetimeHours(
