@@ -1,7 +1,8 @@
 # Organizations Module Task
 
-Status: in progress
+Status: completed
 Date: 2026-07-14
+Completed: 2026-07-19
 
 ## Goal
 
@@ -29,3 +30,7 @@ Provide reusable, production-shaped organization governance without absorbing id
 ## Completion Criterion
 
 The module is complete when public and administration surfaces cover organization, membership, invitation, enrollment, and join-request lifecycle; SQL Server and PostgreSQL migrations are drift-free; real PostgreSQL tests prove race and isolation behavior; package, vulnerability, architecture, and source-boundary checks pass; and no implementation project references another reusable module.
+
+## Completion Record
+
+All four delivery slices and the completion criterion are satisfied. The standalone module owns its domain and persistence without implementation references to another reusable module; Auth recipient admission and tenant access remain in explicit GMA Extensions; and the canonical Skeleton and BunkFy consumers are aligned. The final production proof, including no-store token responses, bounded opt-in retention, provider migrations, cross-repository composition, and exact CI evidence, is recorded in [Organizations Production Hardening Task](organizations-production-hardening-task.md).

@@ -1,7 +1,8 @@
 # Organizations Production Hardening Task
 
-Status: in progress
+Status: completed
 Date: 2026-07-19
+Completed: 2026-07-19
 
 ## Goal
 
@@ -105,3 +106,13 @@ No Framework change is planned. The generic bounded-batch and message-journal pr
 - pending join-request expiry, withdrawal, or cancellation semantics, which require an explicit domain-state and integration-event design;
 - organization deletion and legal erasure workflows;
 - organization merge, hierarchy, billing ownership, or delegated administration.
+
+## Completion Evidence
+
+- Organizations implementation checkpoint `ee5d74d` passes the source-boundary and vulnerability checks, zero-warning build, SQL Server and PostgreSQL migration drift, 40 unit tests, and 4 real PostgreSQL integration tests; its exact GitHub validation and PostgreSQL jobs are green.
+- GMA Extensions remains unchanged and passes all 19 Auth/Organizations, Organizations/Tenancy, and Auth/Notifications tests against the hardened module with no vulnerable packages.
+- GMA Skeleton checkpoint `d3a6b98` emits Organizations settings and sensitive routes only for selected apps, passes the generated selection matrix, zero-warning build, all provider migration checks, the full fast suite, and 21 Docker integration tests; exact Linux and Windows CI jobs are green.
+- BunkFy Backend checkpoint `9349f03` records the module pin, keeps retention disabled in API and Worker baselines, protects OpenAPI export from cleanup overrides, and passes the full build, migration, fast, and 32-test Docker gates. Its exact Linux, Windows, and Docker workflows are green.
+- BunkFy root checkpoint `672b78d` records the backend pin and passes recursive composition, backend verification, current OpenAPI/generated web contracts, and frontend verification in its exact GitHub workflow.
+
+No Framework or product-domain behavior was added. The deferred items remain separate future domain decisions rather than incomplete acceptance criteria for Organizations.
