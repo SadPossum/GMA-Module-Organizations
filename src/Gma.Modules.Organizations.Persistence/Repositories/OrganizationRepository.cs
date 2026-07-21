@@ -33,6 +33,12 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
             invitation => invitation.OrganizationId == organizationId && invitation.Id == invitationId,
             cancellationToken);
 
+    public Task<bool> InvitationIdExistsAsync(
+        Guid invitationId,
+        CancellationToken cancellationToken) => dbContext.Invitations
+        .AsNoTracking()
+        .AnyAsync(invitation => invitation.Id == invitationId, cancellationToken);
+
     public Task<OrganizationInvitation?> GetInvitationByDigestAsync(
         string tokenDigest,
         CancellationToken cancellationToken) =>
@@ -47,6 +53,12 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
         dbContext.EnrollmentLinks.SingleOrDefaultAsync(
             link => link.OrganizationId == organizationId && link.Id == enrollmentLinkId,
             cancellationToken);
+
+    public Task<bool> EnrollmentLinkIdExistsAsync(
+        Guid enrollmentLinkId,
+        CancellationToken cancellationToken) => dbContext.EnrollmentLinks
+        .AsNoTracking()
+        .AnyAsync(link => link.Id == enrollmentLinkId, cancellationToken);
 
     public Task<OrganizationEnrollmentLink?> GetEnrollmentLinkByDigestAsync(
         string tokenDigest,

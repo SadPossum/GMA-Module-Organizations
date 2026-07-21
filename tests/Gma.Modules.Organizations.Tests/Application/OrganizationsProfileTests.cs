@@ -20,7 +20,7 @@ public sealed class OrganizationsProfileTests
     }
 
     [Fact]
-    public void Application_registers_the_membership_lifecycle_contract_once()
+    public void Application_registers_cross_module_contracts_once()
     {
         ServiceCollection services = new();
         IConfiguration configuration = new ConfigurationBuilder().Build();
@@ -30,5 +30,7 @@ public sealed class OrganizationsProfileTests
 
         Assert.Single(services, descriptor =>
             descriptor.ServiceType == typeof(IOrganizationMembershipLifecycle));
+        Assert.Single(services, descriptor =>
+            descriptor.ServiceType == typeof(IOrganizationJoinSourceIssuer));
     }
 }

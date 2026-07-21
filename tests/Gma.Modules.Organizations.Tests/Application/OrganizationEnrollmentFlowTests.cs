@@ -1,6 +1,7 @@
 namespace Gma.Modules.Organizations.Tests.Application;
 
 using Gma.Framework.Cqrs;
+using Gma.Framework.Results;
 using Gma.Framework.Runtime.Identity;
 using Gma.Framework.Runtime.Time;
 using Gma.Modules.Organizations.Application;
@@ -19,6 +20,91 @@ using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.Organization
 public sealed class OrganizationEnrollmentFlowTests
 {
     private static readonly DateTimeOffset Now = new(2026, 7, 14, 12, 0, 0, TimeSpan.Zero);
+
+    [Fact]
+    public async Task Contracts_enrollment_issuance_is_idempotent_and_returns_the_secret_only_once()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        TestClock clock = new(Now);
+        using ServiceProvider services = CreateServices(repository, clock);
+        var issue = services.GetRequiredService<ICommandHandler<
+            IssueOrganizationEnrollmentLinkCommand,
+            OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        Guid sourceId = Guid.NewGuid();
+        OrganizationEnrollmentLinkIssuanceRequest request = new(
+            sourceId,
+            organization.Id,
+            24,
+            10,
+            OrganizationEnrollmentApprovalMode.RequiresApproval,
+            "owner",
+            "user:owner");
+
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> first =
+            await issue.HandleAsync(new IssueOrganizationEnrollmentLinkCommand(request), CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> replay =
+            await issue.HandleAsync(new IssueOrganizationEnrollmentLinkCommand(request), CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> conflict =
+            await issue.HandleAsync(
+                new IssueOrganizationEnrollmentLinkCommand(request with { MaximumClaims = 11 }),
+                CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(first.Value.IsSuccess);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.Issued, first.Value.Outcome);
+        Assert.True(first.Value.HasNewToken);
+        Assert.Equal(43, first.Value.Token!.Length);
+        Assert.True(replay.IsSuccess);
+        Assert.True(replay.Value.IsSuccess);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.AlreadyIssued, replay.Value.Outcome);
+        Assert.Null(replay.Value.Token);
+        Assert.True(conflict.IsFailure);
+        Assert.Equal(OrganizationApplicationErrors.JoinSourceIssuanceConflict, conflict.Error);
+        OrganizationEnrollmentLink stored = Assert.Single(repository.EnrollmentLinks);
+        Assert.Equal(sourceId, stored.Id);
+        Assert.NotEqual(first.Value.Token, stored.TokenDigest);
+    }
+
+    [Fact]
+    public async Task Contracts_enrollment_issuance_rejects_a_source_id_owned_by_another_organization()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        TestClock clock = new(Now);
+        using ServiceProvider services = CreateServices(repository, clock);
+        var issue = services.GetRequiredService<ICommandHandler<
+            IssueOrganizationEnrollmentLinkCommand,
+            OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        Guid sourceId = Guid.NewGuid();
+        repository.EnrollmentLinks.Add(OrganizationEnrollmentLink.Create(
+            sourceId,
+            Guid.NewGuid(),
+            "other-owner",
+            new string('a', 64),
+            Now.AddHours(24),
+            10,
+            Gma.Modules.Organizations.Domain.Enums.OrganizationEnrollmentApprovalMode.RequiresApproval,
+            "user:other-owner",
+            Guid.NewGuid(),
+            Now).Value);
+
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> result =
+            await issue.HandleAsync(
+                new IssueOrganizationEnrollmentLinkCommand(new OrganizationEnrollmentLinkIssuanceRequest(
+                    sourceId,
+                    organization.Id,
+                    24,
+                    10,
+                    OrganizationEnrollmentApprovalMode.RequiresApproval,
+                    "owner",
+                    "user:owner")),
+                CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(OrganizationApplicationErrors.JoinSourceIssuanceConflict, result.Error);
+        Assert.Single(repository.EnrollmentLinks);
+    }
 
     [Fact]
     public void Invitation_and_enrollment_tokens_have_distinct_cryptographic_purposes()

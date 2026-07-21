@@ -21,6 +21,90 @@ public sealed class OrganizationInvitationFlowTests
     private static readonly DateTimeOffset Now = new(2026, 7, 14, 12, 0, 0, TimeSpan.Zero);
 
     [Fact]
+    public async Task Contracts_issuance_is_idempotent_and_returns_the_secret_only_once()
+    {
+        TestRepository repository = CreateRepository();
+        TestClock clock = new();
+        using ServiceProvider services = CreateServices(repository, clock);
+        var issue = services.GetRequiredService<ICommandHandler<
+            IssueOrganizationInvitationCommand,
+            OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        Guid sourceId = Guid.NewGuid();
+        OrganizationInvitationIssuanceRequest request = new(
+            sourceId,
+            organization.Id,
+            " Member@Example.com ",
+            24,
+            "owner",
+            "user:owner");
+
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> first =
+            await issue.HandleAsync(new IssueOrganizationInvitationCommand(request), CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> replay =
+            await issue.HandleAsync(new IssueOrganizationInvitationCommand(request), CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> conflict =
+            await issue.HandleAsync(
+                new IssueOrganizationInvitationCommand(request with { RecipientEmail = "other@example.com" }),
+                CancellationToken.None);
+
+        Assert.True(first.IsSuccess);
+        Assert.True(first.Value.IsSuccess);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.Issued, first.Value.Outcome);
+        Assert.True(first.Value.HasNewToken);
+        Assert.Equal(43, first.Value.Token!.Length);
+        Assert.True(replay.IsSuccess);
+        Assert.True(replay.Value.IsSuccess);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.AlreadyIssued, replay.Value.Outcome);
+        Assert.Null(replay.Value.Token);
+        Assert.False(replay.Value.HasNewToken);
+        Assert.True(conflict.IsFailure);
+        Assert.Equal(OrganizationApplicationErrors.JoinSourceIssuanceConflict, conflict.Error);
+        OrganizationInvitation stored = Assert.Single(repository.Invitations);
+        Assert.Equal(sourceId, stored.Id);
+        Assert.Equal("member@example.com", stored.RecipientEmail);
+        Assert.NotEqual(first.Value.Token, stored.TokenDigest);
+    }
+
+    [Fact]
+    public async Task Contracts_issuance_rejects_a_source_id_owned_by_another_organization()
+    {
+        TestRepository repository = CreateRepository();
+        TestClock clock = new();
+        using ServiceProvider services = CreateServices(repository, clock);
+        var issue = services.GetRequiredService<ICommandHandler<
+            IssueOrganizationInvitationCommand,
+            OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        Guid sourceId = Guid.NewGuid();
+        repository.Invitations.Add(OrganizationInvitation.Create(
+            sourceId,
+            Guid.NewGuid(),
+            "other-owner",
+            null,
+            new string('a', 64),
+            Now.AddHours(24),
+            "user:other-owner",
+            Guid.NewGuid(),
+            Now).Value);
+
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> result =
+            await issue.HandleAsync(
+                new IssueOrganizationInvitationCommand(new OrganizationInvitationIssuanceRequest(
+                    sourceId,
+                    organization.Id,
+                    null,
+                    24,
+                    "owner",
+                    "user:owner")),
+                CancellationToken.None);
+
+        Assert.True(result.IsFailure);
+        Assert.Equal(OrganizationApplicationErrors.JoinSourceIssuanceConflict, result.Error);
+        Assert.Single(repository.Invitations);
+    }
+
+    [Fact]
     public async Task Unbound_invitation_acceptance_is_idempotent_and_secret_is_not_persisted()
     {
         TestRepository repository = CreateRepository();
@@ -260,9 +344,12 @@ public sealed class OrganizationInvitationFlowTests
             Task.FromResult(this.Memberships.SingleOrDefault(item => item.OrganizationId == organizationId && item.SubjectId == subjectId));
         public Task<OrganizationInvitation?> GetInvitationAsync(Guid organizationId, Guid invitationId, CancellationToken cancellationToken) =>
             Task.FromResult(this.Invitations.SingleOrDefault(item => item.OrganizationId == organizationId && item.Id == invitationId));
+        public Task<bool> InvitationIdExistsAsync(Guid invitationId, CancellationToken cancellationToken) =>
+            Task.FromResult(this.Invitations.Any(item => item.Id == invitationId));
         public Task<OrganizationInvitation?> GetInvitationByDigestAsync(string tokenDigest, CancellationToken cancellationToken) =>
             Task.FromResult(this.Invitations.SingleOrDefault(item => item.TokenDigest == tokenDigest));
         public Task<OrganizationEnrollmentLink?> GetEnrollmentLinkAsync(Guid organizationId, Guid enrollmentLinkId, CancellationToken cancellationToken) => Task.FromResult<OrganizationEnrollmentLink?>(null);
+        public Task<bool> EnrollmentLinkIdExistsAsync(Guid enrollmentLinkId, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<OrganizationEnrollmentLink?> GetEnrollmentLinkByDigestAsync(string tokenDigest, CancellationToken cancellationToken) => Task.FromResult<OrganizationEnrollmentLink?>(null);
         public Task<OrganizationEnrollmentClaim?> GetEnrollmentClaimAsync(Guid organizationId, Guid claimId, CancellationToken cancellationToken) => Task.FromResult<OrganizationEnrollmentClaim?>(null);
         public Task<OrganizationEnrollmentClaim?> GetEnrollmentClaimBySubjectAsync(Guid enrollmentLinkId, string subjectId, CancellationToken cancellationToken) => Task.FromResult<OrganizationEnrollmentClaim?>(null);

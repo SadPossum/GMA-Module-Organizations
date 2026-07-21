@@ -27,6 +27,8 @@ public static class OrganizationApplicationErrors
     public static readonly Error EnrollmentClaimNotFound = new("Organizations.EnrollmentClaimNotFound", "The enrollment claim was not found.");
     public static readonly Error EnrollmentDecisionInvalid = new("Organizations.EnrollmentDecisionInvalid", "The enrollment decision is invalid.");
     public static readonly Error JoinAdmissionRejected = new("Organizations.JoinAdmissionRejected", "The product is not ready to admit this subject.");
+    public static readonly Error JoinSourceIdRequired = new("Organizations.JoinSourceIdRequired", "A join-source id is required.");
+    public static readonly Error JoinSourceIssuanceConflict = new("Organizations.JoinSourceIssuanceConflict", "The join-source id is already bound to different issuance inputs.");
     public static Error VersionConflict => OrganizationDomainErrors.VersionConflict;
     public static Error LastActiveOwner => OrganizationDomainErrors.LastActiveOwner;
     public static Error OrganizationNotActive => OrganizationDomainErrors.OrganizationNotActive;

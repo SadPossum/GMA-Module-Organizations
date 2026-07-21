@@ -29,6 +29,11 @@ internal sealed class TestOrganizationRepository(
         Task.FromResult(this.Invitations.SingleOrDefault(item =>
             item.OrganizationId == organizationId && item.Id == invitationId));
 
+    public Task<bool> InvitationIdExistsAsync(
+        Guid invitationId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(this.Invitations.Any(item => item.Id == invitationId));
+
     public Task<OrganizationInvitation?> GetInvitationByDigestAsync(
         string tokenDigest, CancellationToken cancellationToken) =>
         Task.FromResult(this.Invitations.SingleOrDefault(item => item.TokenDigest == tokenDigest));
@@ -37,6 +42,11 @@ internal sealed class TestOrganizationRepository(
         Guid organizationId, Guid enrollmentLinkId, CancellationToken cancellationToken) =>
         Task.FromResult(this.EnrollmentLinks.SingleOrDefault(item =>
             item.OrganizationId == organizationId && item.Id == enrollmentLinkId));
+
+    public Task<bool> EnrollmentLinkIdExistsAsync(
+        Guid enrollmentLinkId,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(this.EnrollmentLinks.Any(item => item.Id == enrollmentLinkId));
 
     public Task<OrganizationEnrollmentLink?> GetEnrollmentLinkByDigestAsync(
         string tokenDigest, CancellationToken cancellationToken) =>
