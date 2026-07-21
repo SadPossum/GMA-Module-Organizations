@@ -4,6 +4,8 @@
 
 Organizations is intentionally independent from Auth, Tenancy, AccessControl, Notifications, and product modules. Authenticated subject ids are opaque strings. Cross-module activation, grant provisioning, and delivery behavior belongs in opt-in extensions.
 
+Product orchestration may suspend, restore, or remove an exact ordinary membership through the Contracts-only `IOrganizationMembershipLifecycle`. The operation is idempotent, protects owner memberships, preserves normal optimistic concurrency and events, and reports stable no-op/not-found/protected outcomes. The facade owns no employment state, access-profile name, property plan, or product reason vocabulary.
+
 The organization id is the immutable technical scope id. A mutable slug is only a routing and display aid. Membership proves belonging but grants no product permission by itself.
 
 Implementation direction and acceptance criteria are tracked in [Organizations Task](organizations-task.md).
