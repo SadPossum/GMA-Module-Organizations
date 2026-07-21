@@ -80,6 +80,72 @@ public sealed class MembershipGovernanceHandlerTests
         Assert.Equal(DomainMembershipRole.Owner, owner.Role);
     }
 
+    [Fact]
+    public async Task Membership_change_remains_allowed_when_no_product_policy_is_registered()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        using ServiceProvider services = CreateServices(repository);
+        var handler = services.GetRequiredService<
+            ICommandHandler<ChangeOrganizationMembershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership owner = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership member = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Member);
+
+        var result = await handler.HandleAsync(new ChangeOrganizationMembershipCommand(
+            organization.Id, member.SubjectId, OrganizationMembershipAction.Suspend,
+            organization.Version, member.Version, owner.SubjectId, "user:owner"), CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error.Code);
+        Assert.Equal(Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipState.Suspended, member.Status);
+    }
+
+    [Fact]
+    public async Task Product_policy_denial_prevents_membership_mutation()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        RecordingMembershipChangePolicy policy = new(OrganizationMembershipChangePolicyDecision.Denied);
+        using ServiceProvider services = CreateServices(repository, policy);
+        var handler = services.GetRequiredService<
+            ICommandHandler<ChangeOrganizationMembershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership owner = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership member = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Member);
+
+        var result = await handler.HandleAsync(new ChangeOrganizationMembershipCommand(
+            organization.Id, member.SubjectId, OrganizationMembershipAction.Remove,
+            organization.Version, member.Version, owner.SubjectId, "user:owner"), CancellationToken.None);
+
+        Assert.Equal(OrganizationApplicationErrors.MembershipChangeRejected, result.Error);
+        Assert.Equal(Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipState.Active, member.Status);
+        Assert.Equal(1, member.Version);
+        Assert.NotNull(policy.Request);
+        Assert.Equal(OrganizationMembershipStatus.Removed, policy.Request.RequestedStatus);
+        Assert.Equal(member.SubjectId, policy.Request.TargetSubjectId);
+    }
+
+    [Fact]
+    public async Task Multiple_product_policies_compose_with_any_denial_winning()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        RecordingMembershipChangePolicy allowed = new(OrganizationMembershipChangePolicyDecision.Allowed);
+        RecordingMembershipChangePolicy denied = new(OrganizationMembershipChangePolicyDecision.Denied);
+        using ServiceProvider services = CreateServices(repository, allowed, denied);
+        var handler = services.GetRequiredService<
+            ICommandHandler<ChangeOrganizationMembershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership owner = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership member = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Member);
+
+        var result = await handler.HandleAsync(new ChangeOrganizationMembershipCommand(
+            organization.Id, member.SubjectId, OrganizationMembershipAction.Suspend,
+            organization.Version, member.Version, owner.SubjectId, "user:owner"), CancellationToken.None);
+
+        Assert.Equal(OrganizationApplicationErrors.MembershipChangeRejected, result.Error);
+        Assert.Equal(Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipState.Active, member.Status);
+        Assert.NotNull(allowed.Request);
+        Assert.NotNull(denied.Request);
+    }
+
     private static TestRepository CreateRepository(bool includeMember)
     {
         Organization organization = Organization.Create(
@@ -98,7 +164,9 @@ public sealed class MembershipGovernanceHandlerTests
         return repository;
     }
 
-    private static ServiceProvider CreateServices(TestRepository repository)
+    private static ServiceProvider CreateServices(
+        TestRepository repository,
+        params IOrganizationMembershipChangePolicy[] membershipChangePolicies)
     {
         IConfiguration configuration = new ConfigurationBuilder().Build();
         ServiceCollection services = new();
@@ -106,7 +174,26 @@ public sealed class MembershipGovernanceHandlerTests
         services.AddSingleton<IOrganizationRepository>(repository);
         services.AddSingleton<ISystemClock>(new TestClock());
         services.AddSingleton<IIdGenerator>(new TestIds());
+        foreach (IOrganizationMembershipChangePolicy membershipChangePolicy in membershipChangePolicies)
+        {
+            services.AddSingleton(membershipChangePolicy);
+        }
         return services.BuildServiceProvider();
+    }
+
+    private sealed class RecordingMembershipChangePolicy(
+        OrganizationMembershipChangePolicyDecision decision)
+        : IOrganizationMembershipChangePolicy
+    {
+        public OrganizationMembershipChangePolicyRequest? Request { get; private set; }
+
+        public ValueTask<OrganizationMembershipChangePolicyDecision> EvaluateAsync(
+            OrganizationMembershipChangePolicyRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            this.Request = request;
+            return ValueTask.FromResult(decision);
+        }
     }
 
     private sealed class TestRepository(Organization organization, OrganizationMembership owner)

@@ -11,6 +11,8 @@ The organization id is the immutable technical scope id. A mutable slug is only 
 Implementation direction and acceptance criteria are tracked in [Organizations Task](organizations-task.md).
 The remaining production hardening work is tracked in
 [Organizations Production Hardening Task](organizations-production-hardening-task.md).
+The reusable host policy seam for owner-facing membership changes is tracked in
+[Organizations Membership Change Policy Task](organizations-membership-change-policy-task.md).
 
 ## Owned behavior
 

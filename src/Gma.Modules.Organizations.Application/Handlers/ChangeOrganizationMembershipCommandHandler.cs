@@ -11,10 +11,13 @@ using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
+using ContractMembershipRole = Gma.Modules.Organizations.Contracts.OrganizationMembershipRole;
+using ContractMembershipStatus = Gma.Modules.Organizations.Contracts.OrganizationMembershipStatus;
 using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipRole;
 
 internal sealed class ChangeOrganizationMembershipCommandHandler(
     IOrganizationRepository organizations,
+    IEnumerable<IOrganizationMembershipChangePolicy> membershipChangePolicies,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<ChangeOrganizationMembershipCommand, OrganizationMembershipDto>
 {
@@ -43,6 +46,37 @@ internal sealed class ChangeOrganizationMembershipCommandHandler(
         if (membership is null)
         {
             return Result.Failure<OrganizationMembershipDto>(OrganizationApplicationErrors.MembershipNotFound);
+        }
+
+        ContractMembershipStatus requestedStatus = command.Action switch
+        {
+            OrganizationMembershipAction.Suspend => ContractMembershipStatus.Suspended,
+            OrganizationMembershipAction.Resume => ContractMembershipStatus.Active,
+            OrganizationMembershipAction.Remove => ContractMembershipStatus.Removed,
+            _ => ContractMembershipStatus.Unknown
+        };
+        if (requestedStatus == ContractMembershipStatus.Unknown)
+        {
+            return Result.Failure<OrganizationMembershipDto>(OrganizationApplicationErrors.MembershipNotFound);
+        }
+
+        OrganizationMembershipChangePolicyRequest policyRequest = new(
+            command.OrganizationId,
+            command.SubjectId,
+            command.TargetSubjectId,
+            ToContractRole(membership.Role),
+            ToContractStatus(membership.Status),
+            requestedStatus);
+        foreach (IOrganizationMembershipChangePolicy policy in membershipChangePolicies)
+        {
+            OrganizationMembershipChangePolicyDecision decision = await policy
+                .EvaluateAsync(policyRequest, cancellationToken)
+                .ConfigureAwait(false);
+            if (decision != OrganizationMembershipChangePolicyDecision.Allowed)
+            {
+                return Result.Failure<OrganizationMembershipDto>(
+                    OrganizationApplicationErrors.MembershipChangeRejected);
+            }
         }
 
         DateTimeOffset nowUtc = clock.UtcNow;
@@ -96,4 +130,19 @@ internal sealed class ChangeOrganizationMembershipCommandHandler(
                 command.ExpectedOrganizationVersion, command.ActorId, ids.NewId(), nowUtc)
             : Result.Success();
     }
+
+    private static ContractMembershipRole ToContractRole(DomainMembershipRole role) => role switch
+    {
+        DomainMembershipRole.Owner => ContractMembershipRole.Owner,
+        DomainMembershipRole.Member => ContractMembershipRole.Member,
+        _ => ContractMembershipRole.Unknown
+    };
+
+    private static ContractMembershipStatus ToContractStatus(OrganizationMembershipState status) => status switch
+    {
+        OrganizationMembershipState.Active => ContractMembershipStatus.Active,
+        OrganizationMembershipState.Suspended => ContractMembershipStatus.Suspended,
+        OrganizationMembershipState.Removed => ContractMembershipStatus.Removed,
+        _ => ContractMembershipStatus.Unknown
+    };
 }
