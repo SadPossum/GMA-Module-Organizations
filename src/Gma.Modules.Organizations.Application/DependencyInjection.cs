@@ -35,6 +35,7 @@ public static class DependencyInjection
         services.TryAddScoped<IOrganizationJoinTokenInspector, OrganizationJoinTokenInspector>();
         services.TryAddScoped<IOrganizationMembershipLifecycle, OrganizationMembershipLifecycle>();
         services.TryAddScoped<IOrganizationJoinSourceIssuer, OrganizationJoinSourceIssuer>();
+        services.TryAddScoped<IOrganizationJoinSourceManager, OrganizationJoinSourceManager>();
         services.TryAddSingleton<IOrganizationInvitationTokenService, OrganizationInvitationTokenService>();
         services.TryAddSingleton<IOrganizationEnrollmentTokenService, OrganizationEnrollmentTokenService>();
         services.AddApplicationServicesFromAssembly(typeof(DependencyInjection).Assembly);

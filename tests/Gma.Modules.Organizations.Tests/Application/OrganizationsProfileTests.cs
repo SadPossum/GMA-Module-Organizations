@@ -32,5 +32,7 @@ public sealed class OrganizationsProfileTests
             descriptor.ServiceType == typeof(IOrganizationMembershipLifecycle));
         Assert.Single(services, descriptor =>
             descriptor.ServiceType == typeof(IOrganizationJoinSourceIssuer));
+        Assert.Single(services, descriptor =>
+            descriptor.ServiceType == typeof(IOrganizationJoinSourceManager));
     }
 }

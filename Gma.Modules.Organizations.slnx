@@ -6,6 +6,7 @@
     <File Path="docs/organizations-lifecycle-consistency-task.md" />
     <File Path="docs/organizations-membership-change-policy-task.md" />
     <File Path="docs/organizations-join-source-issuance-task.md" />
+    <File Path="docs/organizations-join-source-management-task.md" />
   </Folder>
   <Folder Name="/eng/">
     <File Path="eng/bootstrap-source-roots.ps1" />

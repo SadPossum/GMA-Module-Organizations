@@ -6,6 +6,8 @@ Organizations is intentionally independent from Auth, Tenancy, AccessControl, No
 
 Product orchestration may suspend, restore, or remove an exact ordinary membership through the Contracts-only `IOrganizationMembershipLifecycle`. The operation is idempotent, protects owner memberships, preserves normal optimistic concurrency and events, and reports stable no-op/not-found/protected outcomes. The facade owns no employment state, access-profile name, property plan, or product reason vocabulary.
 
+Product orchestration may list and deny invitation/enrollment sources through the Contracts-only `IOrganizationJoinSourceManager`. Reads and mutations reuse the owner-authorized CQRS paths. Secret-bearing replacement is deliberately excluded: products revoke or disable the prior source, then use caller-id-based `IOrganizationJoinSourceIssuer` so retries cannot lose or duplicate a one-time replacement token.
+
 The organization id is the immutable technical scope id. A mutable slug is only a routing and display aid. Membership proves belonging but grants no product permission by itself.
 
 Implementation direction and acceptance criteria are tracked in [Organizations Task](organizations-task.md).
@@ -13,6 +15,8 @@ The remaining production hardening work is tracked in
 [Organizations Production Hardening Task](organizations-production-hardening-task.md).
 The reusable host policy seam for owner-facing membership changes is tracked in
 [Organizations Membership Change Policy Task](organizations-membership-change-policy-task.md).
+The Contracts facade for product-owned source management is tracked in
+[Organizations Join Source Management Task](organizations-join-source-management-task.md).
 
 ## Owned behavior
 
