@@ -2,6 +2,7 @@
 
 using Gma.Framework.Api.Modules;
 using Gma.Framework.Api.Observability;
+using Gma.Framework.ModuleComposition;
 using Gma.Modules.Organizations.Application;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Persistence;
@@ -18,6 +19,7 @@ public sealed class OrganizationsModule : IModule
 
     public void AddServices(IHostApplicationBuilder builder)
     {
+        builder.SelectModuleProfile(OrganizationsProfiles.Default, "Gma.Modules.Organizations.Api");
         builder.Services.AddOptions<OrganizationsApiSecurityOptions>();
         builder.Services.AddOrganizationsApplication(builder.Configuration);
         builder.AddOrganizationsPersistence();

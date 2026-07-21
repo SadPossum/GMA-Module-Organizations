@@ -149,6 +149,66 @@ public sealed class OrganizationEnrollmentFlowTests
     }
 
     [Fact]
+    public async Task Product_policy_denial_mutates_neither_claim_capacity_nor_membership()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        RecordingJoinPolicy policy = new() { IsAllowed = false };
+        using ServiceProvider services = CreateServices(repository, new TestClock(Now), policy);
+        OrganizationEnrollmentLinkIssuedDto issued = await IssueAsync(
+            services, repository, OrganizationEnrollmentApprovalMode.Automatic, maximumClaims: 1);
+        var claimHandler = services.GetRequiredService<
+            ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>>();
+
+        var denied = await claimHandler.HandleAsync(new ClaimOrganizationEnrollmentLinkCommand(
+            issued.Token, "member", "user:member"), CancellationToken.None);
+
+        Assert.True(denied.IsFailure);
+        Assert.Equal(OrganizationApplicationErrors.JoinAdmissionRejected, denied.Error);
+        Assert.Empty(repository.EnrollmentClaims);
+        Assert.DoesNotContain(repository.Memberships, item => item.SubjectId == "member");
+        Assert.Equal(0, Assert.Single(repository.EnrollmentLinks).ReservedClaims);
+        OrganizationJoinAdmissionContext context = Assert.Single(policy.Contexts);
+        Assert.Equal(OrganizationJoinAdmissionOperation.ClaimEnrollment, context.Operation);
+        Assert.Equal(issued.EnrollmentLink.EnrollmentLinkId, context.SourceId);
+        Assert.Equal("member", context.ApplicantSubjectId);
+        Assert.Null(context.ClaimId);
+    }
+
+    [Fact]
+    public async Task Product_policy_can_allow_a_pending_claim_but_deny_approval()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        RecordingJoinPolicy policy = new();
+        using ServiceProvider services = CreateServices(repository, new TestClock(Now), policy);
+        OrganizationEnrollmentLinkIssuedDto issued = await IssueAsync(
+            services, repository, OrganizationEnrollmentApprovalMode.RequiresApproval, maximumClaims: 1);
+        var claimHandler = services.GetRequiredService<
+            ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>>();
+        var resolveHandler = services.GetRequiredService<
+            ICommandHandler<ResolveOrganizationJoinRequestCommand, OrganizationEnrollmentOutcomeDto>>();
+        var pending = await claimHandler.HandleAsync(new ClaimOrganizationEnrollmentLinkCommand(
+            issued.Token, "member", "user:member"), CancellationToken.None);
+        policy.IsAllowed = false;
+
+        Organization organization = Assert.Single(repository.Organizations);
+        var denied = await resolveHandler.HandleAsync(new ResolveOrganizationJoinRequestCommand(
+            organization.Id, pending.Value.Claim.ClaimId, OrganizationJoinRequestDecision.Approve,
+            pending.Value.Claim.Version, "owner", "user:owner"), CancellationToken.None);
+
+        Assert.True(denied.IsFailure);
+        Assert.Equal(OrganizationApplicationErrors.JoinAdmissionRejected, denied.Error);
+        Assert.Equal(
+            Gma.Modules.Organizations.Domain.Enums.OrganizationEnrollmentClaimState.Pending,
+            Assert.Single(repository.EnrollmentClaims).Status);
+        Assert.DoesNotContain(repository.Memberships, item => item.SubjectId == "member");
+        OrganizationJoinAdmissionContext context = Assert.Single(
+            policy.Contexts, item => item.Operation == OrganizationJoinAdmissionOperation.ApproveEnrollment);
+        Assert.Equal(pending.Value.Claim.ClaimId, context.ClaimId);
+        Assert.Equal("member", context.ApplicantSubjectId);
+        Assert.Equal("owner", context.ActorSubjectId);
+    }
+
+    [Fact]
     public async Task Archived_organization_blocks_rotation_but_allows_link_disablement()
     {
         TestOrganizationRepository repository = CreateRepository();
@@ -210,7 +270,8 @@ public sealed class OrganizationEnrollmentFlowTests
 
     private static ServiceProvider CreateServices(
         TestOrganizationRepository repository,
-        TestClock clock)
+        TestClock clock,
+        IOrganizationJoinAdmissionPolicy? joinPolicy = null)
     {
         IConfiguration configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -223,9 +284,27 @@ public sealed class OrganizationEnrollmentFlowTests
             .Build();
         ServiceCollection services = new();
         services.AddOrganizationsApplication(configuration);
+        if (joinPolicy is not null)
+        {
+            services.AddSingleton(joinPolicy);
+        }
         services.AddSingleton<IOrganizationRepository>(repository);
         services.AddSingleton<ISystemClock>(clock);
         services.AddSingleton<IIdGenerator>(new TestIds());
         return services.BuildServiceProvider();
+    }
+
+    private sealed class RecordingJoinPolicy : IOrganizationJoinAdmissionPolicy
+    {
+        public bool IsAllowed { get; set; } = true;
+        public List<OrganizationJoinAdmissionContext> Contexts { get; } = [];
+
+        public ValueTask<bool> IsAllowedAsync(
+            OrganizationJoinAdmissionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            this.Contexts.Add(context);
+            return ValueTask.FromResult(this.IsAllowed);
+        }
     }
 }

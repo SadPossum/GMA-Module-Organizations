@@ -25,6 +25,7 @@ public static class OrganizationApplicationErrors
     public static readonly Error EnrollmentClaimLimitInvalid = new("Organizations.EnrollmentClaimLimitInvalid", "The enrollment-link claim limit is invalid.");
     public static readonly Error EnrollmentClaimNotFound = new("Organizations.EnrollmentClaimNotFound", "The enrollment claim was not found.");
     public static readonly Error EnrollmentDecisionInvalid = new("Organizations.EnrollmentDecisionInvalid", "The enrollment decision is invalid.");
+    public static readonly Error JoinAdmissionRejected = new("Organizations.JoinAdmissionRejected", "The product is not ready to admit this subject.");
     public static Error VersionConflict => OrganizationDomainErrors.VersionConflict;
     public static Error LastActiveOwner => OrganizationDomainErrors.LastActiveOwner;
     public static Error OrganizationNotActive => OrganizationDomainErrors.OrganizationNotActive;

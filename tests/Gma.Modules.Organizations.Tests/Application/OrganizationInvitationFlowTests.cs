@@ -122,6 +122,44 @@ public sealed class OrganizationInvitationFlowTests
     }
 
     [Fact]
+    public async Task Product_policy_denies_a_fresh_acceptance_but_not_an_accepted_retry()
+    {
+        TestRepository repository = CreateRepository();
+        TestClock clock = new();
+        RecordingJoinPolicy policy = new();
+        using ServiceProvider services = CreateServices(repository, clock, policy);
+        var create = services.GetRequiredService<
+            ICommandHandler<CreateOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
+        var accept = services.GetRequiredService<
+            ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        var issued = await create.HandleAsync(new CreateOrganizationInvitationCommand(
+            organization.Id, null, 24, "owner", "user:owner"), CancellationToken.None);
+        policy.IsAllowed = false;
+
+        var denied = await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
+            issued.Value.Token, "member", "user:member"), CancellationToken.None);
+        Assert.True(denied.IsFailure);
+        Assert.Equal(OrganizationApplicationErrors.JoinAdmissionRejected, denied.Error);
+        Assert.DoesNotContain(repository.Memberships, membership => membership.SubjectId == "member");
+        Assert.Null(Assert.Single(repository.Invitations).AcceptedSubjectId);
+
+        policy.IsAllowed = true;
+        Assert.True((await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
+            issued.Value.Token, "member", "user:member"), CancellationToken.None)).IsSuccess);
+        policy.IsAllowed = false;
+        var retry = await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
+            issued.Value.Token, "member", "user:member"), CancellationToken.None);
+
+        Assert.True(retry.IsSuccess);
+        Assert.Equal(2, policy.Contexts.Count);
+        OrganizationJoinAdmissionContext context = policy.Contexts[^1];
+        Assert.Equal(OrganizationJoinAdmissionOperation.AcceptInvitation, context.Operation);
+        Assert.Equal(issued.Value.Invitation.InvitationId, context.SourceId);
+        Assert.Equal("member", context.ApplicantSubjectId);
+    }
+
+    [Fact]
     public async Task Suspended_organization_blocks_reissue_but_allows_revocation()
     {
         TestRepository repository = CreateRepository();
@@ -170,7 +208,10 @@ public sealed class OrganizationInvitationFlowTests
         return new TestRepository(organization, owner);
     }
 
-    private static ServiceProvider CreateServices(TestRepository repository, TestClock clock)
+    private static ServiceProvider CreateServices(
+        TestRepository repository,
+        TestClock clock,
+        IOrganizationJoinAdmissionPolicy? joinPolicy = null)
     {
         IConfiguration configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -182,10 +223,28 @@ public sealed class OrganizationInvitationFlowTests
             .Build();
         ServiceCollection services = new();
         services.AddOrganizationsApplication(configuration);
+        if (joinPolicy is not null)
+        {
+            services.AddSingleton(joinPolicy);
+        }
         services.AddSingleton<IOrganizationRepository>(repository);
         services.AddSingleton<ISystemClock>(clock);
         services.AddSingleton<IIdGenerator>(new TestIds());
         return services.BuildServiceProvider();
+    }
+
+    private sealed class RecordingJoinPolicy : IOrganizationJoinAdmissionPolicy
+    {
+        public bool IsAllowed { get; set; } = true;
+        public List<OrganizationJoinAdmissionContext> Contexts { get; } = [];
+
+        public ValueTask<bool> IsAllowedAsync(
+            OrganizationJoinAdmissionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            this.Contexts.Add(context);
+            return ValueTask.FromResult(this.IsAllowed);
+        }
     }
 
     private sealed class TestRepository(Organization organization, OrganizationMembership owner)

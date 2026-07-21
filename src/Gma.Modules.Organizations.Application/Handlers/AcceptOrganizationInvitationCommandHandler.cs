@@ -6,6 +6,7 @@ using Gma.Framework.Runtime.Identity;
 using Gma.Framework.Runtime.Time;
 using Gma.Modules.Organizations.Application.Commands;
 using Gma.Modules.Organizations.Application.Mapping;
+using Gma.Modules.Organizations.Application.Policies;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
@@ -16,6 +17,7 @@ internal sealed class AcceptOrganizationInvitationCommandHandler(
     IOrganizationRepository organizations,
     IOrganizationInvitationTokenService tokens,
     IOrganizationInvitationAdmissionPolicy admissionPolicy,
+    OrganizationJoinAdmissionPolicy joinAdmissionPolicy,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>
 {
@@ -68,6 +70,22 @@ internal sealed class AcceptOrganizationInvitationCommandHandler(
         if (acceptable.IsFailure)
         {
             return Result.Failure<OrganizationInvitationAcceptanceDto>(acceptable.Error);
+        }
+
+        bool productReady = await joinAdmissionPolicy.IsAllowedAsync(
+            new OrganizationJoinAdmissionContext(
+                OrganizationJoinAdmissionOperation.AcceptInvitation,
+                organization.Id,
+                invitation.Id,
+                null,
+                command.SubjectId,
+                command.SubjectId,
+                null),
+            cancellationToken).ConfigureAwait(false);
+        if (!productReady)
+        {
+            return Result.Failure<OrganizationInvitationAcceptanceDto>(
+                OrganizationApplicationErrors.JoinAdmissionRejected);
         }
 
         if (membership is null)

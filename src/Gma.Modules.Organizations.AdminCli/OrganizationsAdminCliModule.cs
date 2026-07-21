@@ -1,6 +1,7 @@
 namespace Gma.Modules.Organizations.AdminCli;
 
 using Gma.Framework.Administration.Cli;
+using Gma.Framework.ModuleComposition;
 using Gma.Modules.Organizations.Application;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Persistence;
@@ -14,6 +15,7 @@ public sealed class OrganizationsAdminCliModule : IAdminCliModule
 
     public void AddServices(IHostApplicationBuilder builder)
     {
+        builder.SelectModuleProfile(OrganizationsProfiles.Default, "Gma.Modules.Organizations.AdminCli");
         builder.Services.AddOrganizationsApplication(builder.Configuration);
         builder.AddOrganizationsPersistence();
     }

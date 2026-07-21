@@ -14,6 +14,7 @@ using Gma.Modules.Organizations.Domain.Enums;
 
 internal sealed class ResolveOrganizationJoinRequestCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationJoinAdmissionPolicy joinAdmissionPolicy,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<ResolveOrganizationJoinRequestCommand, OrganizationEnrollmentOutcomeDto>
 {
@@ -47,7 +48,7 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
         return command.Decision switch
         {
             OrganizationJoinRequestDecision.Approve => await this.ApproveAsync(
-                command, claim, cancellationToken).ConfigureAwait(false),
+                command, claim, link, cancellationToken).ConfigureAwait(false),
             OrganizationJoinRequestDecision.Reject => this.Reject(command, claim, link),
             _ => Result.Failure<OrganizationEnrollmentOutcomeDto>(
                 OrganizationApplicationErrors.EnrollmentDecisionInvalid)
@@ -57,6 +58,7 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
     private async Task<Result<OrganizationEnrollmentOutcomeDto>> ApproveAsync(
         ResolveOrganizationJoinRequestCommand command,
         OrganizationEnrollmentClaim claim,
+        OrganizationEnrollmentLink link,
         CancellationToken cancellationToken)
     {
         if (claim.Version != command.ExpectedClaimVersion)
@@ -78,6 +80,22 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
             return Result.Failure<OrganizationEnrollmentOutcomeDto>(organization is null
                 ? OrganizationApplicationErrors.OrganizationNotFound
                 : Gma.Modules.Organizations.Domain.Errors.OrganizationDomainErrors.OrganizationNotActive);
+        }
+
+        bool productReady = await joinAdmissionPolicy.IsAllowedAsync(
+            new OrganizationJoinAdmissionContext(
+                OrganizationJoinAdmissionOperation.ApproveEnrollment,
+                organization.Id,
+                link.Id,
+                claim.Id,
+                claim.SubjectId,
+                command.SubjectId,
+                OrganizationMappings.MapMode(link.ApprovalMode)),
+            cancellationToken).ConfigureAwait(false);
+        if (!productReady)
+        {
+            return Result.Failure<OrganizationEnrollmentOutcomeDto>(
+                OrganizationApplicationErrors.JoinAdmissionRejected);
         }
 
         DateTimeOffset nowUtc = clock.UtcNow;

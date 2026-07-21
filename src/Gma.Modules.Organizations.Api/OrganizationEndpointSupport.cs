@@ -30,6 +30,7 @@ internal static class OrganizationEndpointSupport
         new(OrganizationApplicationErrors.EnrollmentClaimLimitInvalid.Code, StatusCodes.Status400BadRequest),
         new(OrganizationApplicationErrors.EnrollmentClaimNotFound.Code, StatusCodes.Status404NotFound),
         new(OrganizationApplicationErrors.EnrollmentDecisionInvalid.Code, StatusCodes.Status400BadRequest),
+        new(OrganizationApplicationErrors.JoinAdmissionRejected.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.VersionConflict.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.LastActiveOwner.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.InvitationExpired.Code, StatusCodes.Status410Gone),

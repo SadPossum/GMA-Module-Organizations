@@ -6,6 +6,7 @@ using Gma.Framework.Runtime.Identity;
 using Gma.Framework.Runtime.Time;
 using Gma.Modules.Organizations.Application.Commands;
 using Gma.Modules.Organizations.Application.Mapping;
+using Gma.Modules.Organizations.Application.Policies;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
@@ -15,6 +16,7 @@ using DomainApprovalMode = Gma.Modules.Organizations.Domain.Enums.OrganizationEn
 internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
     IOrganizationRepository organizations,
     IOrganizationEnrollmentTokenService tokens,
+    OrganizationJoinAdmissionPolicy joinAdmissionPolicy,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>
 {
@@ -56,6 +58,22 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
         if (existingMembership is { Status: OrganizationMembershipState.Active })
         {
             return Result.Failure<OrganizationEnrollmentOutcomeDto>(OrganizationApplicationErrors.MembershipConflict);
+        }
+
+        bool productReady = await joinAdmissionPolicy.IsAllowedAsync(
+            new OrganizationJoinAdmissionContext(
+                OrganizationJoinAdmissionOperation.ClaimEnrollment,
+                organization.Id,
+                link.Id,
+                null,
+                command.SubjectId,
+                command.SubjectId,
+                OrganizationMappings.MapMode(link.ApprovalMode)),
+            cancellationToken).ConfigureAwait(false);
+        if (!productReady)
+        {
+            return Result.Failure<OrganizationEnrollmentOutcomeDto>(
+                OrganizationApplicationErrors.JoinAdmissionRejected);
         }
 
         DateTimeOffset nowUtc = clock.UtcNow;

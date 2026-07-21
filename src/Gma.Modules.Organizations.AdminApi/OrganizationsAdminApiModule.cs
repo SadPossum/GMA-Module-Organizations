@@ -5,6 +5,7 @@ using Gma.Framework.Administration.Api;
 using Gma.Framework.Api.Observability;
 using Gma.Framework.Api.Results;
 using Gma.Framework.Cqrs;
+using Gma.Framework.ModuleComposition;
 using Gma.Framework.Pagination;
 using Gma.Framework.Results;
 using Gma.Modules.Organizations.Admin.Contracts;
@@ -25,6 +26,7 @@ public sealed class OrganizationsAdminApiModule : IAdminApiModule
 
     public void AddServices(IHostApplicationBuilder builder)
     {
+        builder.SelectModuleProfile(OrganizationsProfiles.Default, "Gma.Modules.Organizations.AdminApi");
         builder.Services.AddOrganizationsApplication(builder.Configuration);
         builder.AddOrganizationsPersistence();
     }
