@@ -8,6 +8,7 @@
     <ProjectReference Include="$(GmaFrameworkRoot)Api\Gma.Framework.Api\Gma.Framework.Api.csproj" />
     <ProjectReference Include="$(GmaFrameworkRoot)Cqrs\Gma.Framework.Cqrs\Gma.Framework.Cqrs.csproj" />
     <ProjectReference Include="$(GmaFrameworkRoot)Security\Gma.Framework.Security\Gma.Framework.Security.csproj" />
+    <ProjectReference Include="$(GmaFrameworkRoot)Security\Gma.Framework.Security.AspNetCore\Gma.Framework.Security.AspNetCore.csproj" />
     <ProjectReference Include="..\Gma.Modules.Organizations.Persistence\Gma.Modules.Organizations.Persistence.csproj" />
   </ItemGroup>
 </Project>

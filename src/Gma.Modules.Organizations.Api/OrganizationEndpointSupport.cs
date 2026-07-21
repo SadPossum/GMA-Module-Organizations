@@ -3,7 +3,9 @@ namespace Gma.Modules.Organizations.Api;
 using System.Security.Claims;
 using Gma.Framework.Api.Results;
 using Gma.Framework.Security;
+using Gma.Framework.Security.AspNetCore;
 using Gma.Modules.Organizations.Application;
+using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 
 internal static class OrganizationEndpointSupport
@@ -16,6 +18,7 @@ internal static class OrganizationEndpointSupport
         new(OrganizationApplicationErrors.SlugConflict.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.MembershipConflict.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.SelfServiceCreationDisabled.Code, StatusCodes.Status403Forbidden),
+        new(OrganizationApplicationErrors.SubjectVerificationRequired.Code, StatusCodes.Status403Forbidden),
         new(OrganizationApplicationErrors.OwnershipTargetMustDiffer.Code, StatusCodes.Status400BadRequest),
         new(OrganizationApplicationErrors.InvitationNotFound.Code, StatusCodes.Status404NotFound),
         new(OrganizationApplicationErrors.InvitationTokenInvalid.Code, StatusCodes.Status404NotFound),
@@ -46,6 +49,16 @@ internal static class OrganizationEndpointSupport
     }
 
     public static string Actor(string subjectId) => $"user:{subjectId}";
+
+    public static RouteHandlerBuilder RequireAssuranceWhenConfigured(
+        RouteHandlerBuilder endpoint,
+        AuthenticationAssuranceRequirement? requirement)
+    {
+        ArgumentNullException.ThrowIfNull(endpoint);
+        return requirement is null
+            ? endpoint
+            : endpoint.RequireAuthenticationAssurance(requirement);
+    }
 
     public static void SetNoStoreHeaders(HttpContext context)
     {

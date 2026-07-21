@@ -5,6 +5,7 @@ using Gma.Framework.Api.Observability;
 using Gma.Framework.Api.Results;
 using Gma.Framework.Cqrs;
 using Gma.Framework.Pagination;
+using Gma.Framework.Security;
 using Gma.Modules.Organizations.Api.Requests;
 using Gma.Modules.Organizations.Application.Commands;
 using Gma.Modules.Organizations.Application.Queries;
@@ -15,7 +16,9 @@ using Microsoft.AspNetCore.Routing;
 
 internal static class OrganizationEnrollmentEndpoints
 {
-    public static void MapOwnerOperations(RouteGroupBuilder organizations)
+    public static void MapOwnerOperations(
+        RouteGroupBuilder organizations,
+        AuthenticationAssuranceRequirement? governanceAssurance)
     {
         organizations.MapGet("/{organizationId:guid}/enrollment-links", async (
             Guid organizationId, int? page, int? pageSize, HttpContext context,
@@ -32,7 +35,7 @@ internal static class OrganizationEnrollmentEndpoints
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
         }).Produces<OrganizationEnrollmentLinkListResponse>(StatusCodes.Status200OK);
 
-        organizations.MapPost("/{organizationId:guid}/enrollment-links", async (
+        RouteHandlerBuilder createLink = organizations.MapPost("/{organizationId:guid}/enrollment-links", async (
             Guid organizationId, CreateOrganizationEnrollmentLinkRequest request,
             HttpContext context, IRequestDispatcher dispatcher, CancellationToken token) =>
         {
@@ -47,9 +50,10 @@ internal static class OrganizationEnrollmentEndpoints
                 subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
         }).Produces<OrganizationEnrollmentLinkIssuedDto>(StatusCodes.Status200OK);
+        OrganizationEndpointSupport.RequireAssuranceWhenConfigured(createLink, governanceAssurance);
 
-        MapLinkAction(organizations, "disable", OrganizationEnrollmentLinkAction.Disable);
-        MapLinkAction(organizations, "rotate", OrganizationEnrollmentLinkAction.Rotate);
+        MapLinkAction(organizations, "disable", OrganizationEnrollmentLinkAction.Disable, governanceAssurance);
+        MapLinkAction(organizations, "rotate", OrganizationEnrollmentLinkAction.Rotate, governanceAssurance);
 
         organizations.MapGet("/{organizationId:guid}/join-requests", async (
             Guid organizationId, int? page, int? pageSize, HttpContext context,
@@ -66,8 +70,8 @@ internal static class OrganizationEnrollmentEndpoints
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
         }).Produces<OrganizationJoinRequestListResponse>(StatusCodes.Status200OK);
 
-        MapJoinRequestDecision(organizations, "approve", OrganizationJoinRequestDecision.Approve);
-        MapJoinRequestDecision(organizations, "reject", OrganizationJoinRequestDecision.Reject);
+        MapJoinRequestDecision(organizations, "approve", OrganizationJoinRequestDecision.Approve, governanceAssurance);
+        MapJoinRequestDecision(organizations, "reject", OrganizationJoinRequestDecision.Reject, governanceAssurance);
     }
 
     public static void MapClaimOperations(IEndpointRouteBuilder endpoints, string moduleName)
@@ -105,9 +109,10 @@ internal static class OrganizationEnrollmentEndpoints
     private static void MapLinkAction(
         RouteGroupBuilder organizations,
         string route,
-        OrganizationEnrollmentLinkAction action)
+        OrganizationEnrollmentLinkAction action,
+        AuthenticationAssuranceRequirement? governanceAssurance)
     {
-        organizations.MapPost($"/{{organizationId:guid}}/enrollment-links/{{enrollmentLinkId:guid}}/{route}",
+        RouteHandlerBuilder endpoint = organizations.MapPost($"/{{organizationId:guid}}/enrollment-links/{{enrollmentLinkId:guid}}/{route}",
             async (Guid organizationId, Guid enrollmentLinkId,
                 ChangeOrganizationEnrollmentLinkRequest request, HttpContext context,
                 IRequestDispatcher dispatcher, CancellationToken token) =>
@@ -124,14 +129,16 @@ internal static class OrganizationEnrollmentEndpoints
                     OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
                     .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
             }).Produces<OrganizationEnrollmentLinkMutationDto>(StatusCodes.Status200OK);
+        OrganizationEndpointSupport.RequireAssuranceWhenConfigured(endpoint, governanceAssurance);
     }
 
     private static void MapJoinRequestDecision(
         RouteGroupBuilder organizations,
         string route,
-        OrganizationJoinRequestDecision decision)
+        OrganizationJoinRequestDecision decision,
+        AuthenticationAssuranceRequirement? governanceAssurance)
     {
-        organizations.MapPost($"/{{organizationId:guid}}/join-requests/{{claimId:guid}}/{route}",
+        RouteHandlerBuilder endpoint = organizations.MapPost($"/{{organizationId:guid}}/join-requests/{{claimId:guid}}/{route}",
             async (Guid organizationId, Guid claimId,
                 ResolveOrganizationJoinRequestRequest request, HttpContext context,
                 IRequestDispatcher dispatcher, CancellationToken token) =>
@@ -146,5 +153,6 @@ internal static class OrganizationEnrollmentEndpoints
                     subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
                     .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
             }).Produces<OrganizationEnrollmentOutcomeDto>(StatusCodes.Status200OK);
+        OrganizationEndpointSupport.RequireAssuranceWhenConfigured(endpoint, governanceAssurance);
     }
 }

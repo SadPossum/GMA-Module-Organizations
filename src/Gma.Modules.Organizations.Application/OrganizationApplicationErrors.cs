@@ -12,6 +12,7 @@ public static class OrganizationApplicationErrors
     public static readonly Error SlugConflict = new("Organizations.SlugConflict", "The organization slug is already in use.");
     public static readonly Error MembershipConflict = new("Organizations.MembershipConflict", "The subject already has an organization membership.");
     public static readonly Error SelfServiceCreationDisabled = new("Organizations.SelfServiceCreationDisabled", "Self-service organization creation is disabled.");
+    public static readonly Error SubjectVerificationRequired = new("Organizations.SubjectVerificationRequired", "A verified subject identity is required.");
     public static readonly Error OwnershipTargetMustDiffer = new("Organizations.OwnershipTargetMustDiffer", "Ownership must be transferred to another active member.");
     public static readonly Error OrganizationLifecycleActionInvalid = new("Organizations.OrganizationLifecycleActionInvalid", "The organization lifecycle action is invalid.");
     public static readonly Error InvitationNotFound = new("Organizations.InvitationNotFound", "The invitation was not found.");

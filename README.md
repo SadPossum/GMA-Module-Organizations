@@ -10,3 +10,8 @@ Useful entry points:
 - `docs/README.md`
 - `docs/organizations-task.md`
 - `eng/verify.ps1`
+
+Hosts may configure `OrganizationsApiSecurityOptions.GovernanceOperationsAssurance`
+with a GMA `AuthenticationAssuranceRequirement`. When configured, organization
+creation and governance mutations require that assurance; catalog reads,
+invitation acceptance, and enrollment claims retain their existing behavior.

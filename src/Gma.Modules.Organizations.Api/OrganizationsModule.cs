@@ -10,18 +10,24 @@ using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Routing;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Options;
+
 public sealed class OrganizationsModule : IModule
 {
     public string Name => OrganizationsModuleMetadata.Name;
 
     public void AddServices(IHostApplicationBuilder builder)
     {
+        builder.Services.AddOptions<OrganizationsApiSecurityOptions>();
         builder.Services.AddOrganizationsApplication(builder.Configuration);
         builder.AddOrganizationsPersistence();
     }
 
     public void MapEndpoints(IEndpointRouteBuilder endpoints)
     {
-        OrganizationEndpoints.Map(endpoints, this.Name);
+        OrganizationsApiSecurityOptions security = endpoints.ServiceProvider
+            .GetRequiredService<IOptions<OrganizationsApiSecurityOptions>>()
+            .Value;
+        OrganizationEndpoints.Map(endpoints, this.Name, security.GovernanceOperationsAssurance);
     }
 }
