@@ -4,6 +4,7 @@
     <File Path="docs/organizations-task.md" />
     <File Path="docs/organizations-production-hardening-task.md" />
     <File Path="docs/organizations-lifecycle-consistency-task.md" />
+    <File Path="docs/organizations-membership-change-policy-task.md" />
   </Folder>
   <Folder Name="/eng/">
     <File Path="eng/bootstrap-source-roots.ps1" />
