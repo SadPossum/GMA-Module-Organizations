@@ -9,6 +9,36 @@ using Gma.Modules.Organizations.Contracts;
 internal sealed class OrganizationJoinSourceManager(IRequestDispatcher dispatcher)
     : IOrganizationJoinSourceManager
 {
+    public async Task<OrganizationJoinSourceOperation<OrganizationInvitationDto>> GetInvitationAsync(
+        OrganizationJoinSourceLookupRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Result<OrganizationInvitationDto> result = await dispatcher.QueryAsync(
+                new GetOrganizationInvitationQuery(
+                    request.OrganizationId,
+                    request.SourceId,
+                    request.SubjectId),
+                cancellationToken)
+            .ConfigureAwait(false);
+        return Complete(result);
+    }
+
+    public async Task<OrganizationJoinSourceOperation<OrganizationEnrollmentLinkDto>> GetEnrollmentLinkAsync(
+        OrganizationJoinSourceLookupRequest request,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(request);
+        Result<OrganizationEnrollmentLinkDto> result = await dispatcher.QueryAsync(
+                new GetOrganizationEnrollmentLinkQuery(
+                    request.OrganizationId,
+                    request.SourceId,
+                    request.SubjectId),
+                cancellationToken)
+            .ConfigureAwait(false);
+        return Complete(result);
+    }
+
     public async Task<OrganizationJoinSourceOperation<OrganizationInvitationListResponse>> ListInvitationsAsync(
         OrganizationJoinSourceListRequest request,
         CancellationToken cancellationToken = default)

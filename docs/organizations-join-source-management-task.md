@@ -15,14 +15,15 @@ Let composing products inspect and deny existing invitation/enrollment sources t
 
 ## Delivery
 
-- Add `IOrganizationJoinSourceManager` for owner-checked paged invitation and enrollment-link reads.
+- Add `IOrganizationJoinSourceManager` for owner-checked paged and exact invitation and enrollment-link reads.
 - Add deny-first invitation revocation and enrollment-link disable operations through the existing CQRS handlers.
 - Return stable Contracts DTOs plus error codes and never expose stored token digests.
 - Keep plaintext replacement secrets out of the manager. Products replace a source by disabling/revoking it and then using the idempotent caller-id `IOrganizationJoinSourceIssuer`; the non-idempotent HTTP reissue/rotate commands remain interactive front-door behavior.
 
 ## Verification
 
-- the manager dispatches existing owner-authorized queries and commands;
+- exact and paged reads authorize the owner before source state is loaded;
+- the manager dispatches owner-authorized queries and commands;
 - disable can never request a replacement token;
 - expected failures preserve stable error codes and no value;
 - null requests fail before dispatch;

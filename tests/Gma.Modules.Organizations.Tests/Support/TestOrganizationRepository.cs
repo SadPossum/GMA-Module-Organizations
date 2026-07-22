@@ -15,19 +15,28 @@ internal sealed class TestOrganizationRepository(
     public List<OrganizationInvitation> Invitations { get; } = [];
     public List<OrganizationEnrollmentLink> EnrollmentLinks { get; } = [];
     public List<OrganizationEnrollmentClaim> EnrollmentClaims { get; } = [];
+    public int MembershipReadCount { get; private set; }
+    public int InvitationReadCount { get; private set; }
+    public int EnrollmentLinkReadCount { get; private set; }
 
     public Task<Organization?> GetOrganizationAsync(Guid organizationId, CancellationToken cancellationToken) =>
         Task.FromResult(this.Organizations.SingleOrDefault(item => item.Id == organizationId));
 
     public Task<OrganizationMembership?> GetMembershipAsync(
-        Guid organizationId, string subjectId, CancellationToken cancellationToken) =>
-        Task.FromResult(this.Memberships.SingleOrDefault(item =>
+        Guid organizationId, string subjectId, CancellationToken cancellationToken)
+    {
+        this.MembershipReadCount++;
+        return Task.FromResult(this.Memberships.SingleOrDefault(item =>
             item.OrganizationId == organizationId && item.SubjectId == subjectId.Trim()));
+    }
 
     public Task<OrganizationInvitation?> GetInvitationAsync(
-        Guid organizationId, Guid invitationId, CancellationToken cancellationToken) =>
-        Task.FromResult(this.Invitations.SingleOrDefault(item =>
+        Guid organizationId, Guid invitationId, CancellationToken cancellationToken)
+    {
+        this.InvitationReadCount++;
+        return Task.FromResult(this.Invitations.SingleOrDefault(item =>
             item.OrganizationId == organizationId && item.Id == invitationId));
+    }
 
     public Task<bool> InvitationIdExistsAsync(
         Guid invitationId,
@@ -39,9 +48,12 @@ internal sealed class TestOrganizationRepository(
         Task.FromResult(this.Invitations.SingleOrDefault(item => item.TokenDigest == tokenDigest));
 
     public Task<OrganizationEnrollmentLink?> GetEnrollmentLinkAsync(
-        Guid organizationId, Guid enrollmentLinkId, CancellationToken cancellationToken) =>
-        Task.FromResult(this.EnrollmentLinks.SingleOrDefault(item =>
+        Guid organizationId, Guid enrollmentLinkId, CancellationToken cancellationToken)
+    {
+        this.EnrollmentLinkReadCount++;
+        return Task.FromResult(this.EnrollmentLinks.SingleOrDefault(item =>
             item.OrganizationId == organizationId && item.Id == enrollmentLinkId));
+    }
 
     public Task<bool> EnrollmentLinkIdExistsAsync(
         Guid enrollmentLinkId,

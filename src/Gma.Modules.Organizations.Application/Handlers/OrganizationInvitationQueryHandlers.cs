@@ -74,3 +74,26 @@ internal sealed class ListOrganizationInvitationsQueryHandler(
             .ConfigureAwait(false));
     }
 }
+
+internal sealed class GetOrganizationInvitationQueryHandler(
+    IOrganizationRepository organizations,
+    ISystemClock clock) : IQueryHandler<GetOrganizationInvitationQuery, OrganizationInvitationDto>
+{
+    public async Task<Result<OrganizationInvitationDto>> HandleAsync(
+        GetOrganizationInvitationQuery query,
+        CancellationToken cancellationToken)
+    {
+        Result<OrganizationMembership> owner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
+            organizations, query.OrganizationId, query.SubjectId, cancellationToken).ConfigureAwait(false);
+        if (owner.IsFailure)
+        {
+            return Result.Failure<OrganizationInvitationDto>(owner.Error);
+        }
+
+        OrganizationInvitation? invitation = await organizations.GetInvitationAsync(
+            query.OrganizationId, query.InvitationId, cancellationToken).ConfigureAwait(false);
+        return invitation is null
+            ? Result.Failure<OrganizationInvitationDto>(OrganizationApplicationErrors.InvitationNotFound)
+            : Result.Success(invitation.ToDto(clock.UtcNow));
+    }
+}

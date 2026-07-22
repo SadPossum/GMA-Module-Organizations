@@ -74,6 +74,29 @@ internal sealed class ListOrganizationEnrollmentLinksQueryHandler(
     }
 }
 
+internal sealed class GetOrganizationEnrollmentLinkQueryHandler(
+    IOrganizationRepository organizations,
+    ISystemClock clock) : IQueryHandler<GetOrganizationEnrollmentLinkQuery, OrganizationEnrollmentLinkDto>
+{
+    public async Task<Result<OrganizationEnrollmentLinkDto>> HandleAsync(
+        GetOrganizationEnrollmentLinkQuery query,
+        CancellationToken cancellationToken)
+    {
+        Result<OrganizationMembership> owner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
+            organizations, query.OrganizationId, query.SubjectId, cancellationToken).ConfigureAwait(false);
+        if (owner.IsFailure)
+        {
+            return Result.Failure<OrganizationEnrollmentLinkDto>(owner.Error);
+        }
+
+        OrganizationEnrollmentLink? link = await organizations.GetEnrollmentLinkAsync(
+            query.OrganizationId, query.EnrollmentLinkId, cancellationToken).ConfigureAwait(false);
+        return link is null
+            ? Result.Failure<OrganizationEnrollmentLinkDto>(OrganizationApplicationErrors.EnrollmentLinkNotFound)
+            : Result.Success(link.ToDto(clock.UtcNow));
+    }
+}
+
 internal sealed class ListOrganizationJoinRequestsQueryHandler(IOrganizationRepository organizations)
     : IQueryHandler<ListOrganizationJoinRequestsQuery, OrganizationJoinRequestListResponse>
 {

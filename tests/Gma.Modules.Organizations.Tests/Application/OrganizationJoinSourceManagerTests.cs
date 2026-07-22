@@ -23,6 +23,8 @@ public sealed class OrganizationJoinSourceManagerTests
         OrganizationEnrollmentLinkDto link = CreateEnrollmentLink();
         RecordingDispatcher dispatcher = new(request => request switch
         {
+            GetOrganizationInvitationQuery => Result.Success(invitation),
+            GetOrganizationEnrollmentLinkQuery => Result.Success(link),
             ListOrganizationInvitationsQuery => Result.Success(
                 new OrganizationInvitationListResponse([invitation], 2, 10)),
             ListOrganizationEnrollmentLinksQuery => Result.Success(
@@ -43,6 +45,10 @@ public sealed class OrganizationJoinSourceManagerTests
         OrganizationJoinSourceManager manager = new(dispatcher);
         OrganizationJoinSourceListRequest listRequest = new(OrganizationId, "owner-a", 2, 10);
 
+        OrganizationJoinSourceOperation<OrganizationInvitationDto> selectedInvitation =
+            await manager.GetInvitationAsync(new(OrganizationId, InvitationId, "owner-a"));
+        OrganizationJoinSourceOperation<OrganizationEnrollmentLinkDto> selectedLink =
+            await manager.GetEnrollmentLinkAsync(new(OrganizationId, EnrollmentLinkId, "owner-a"));
         OrganizationJoinSourceOperation<OrganizationInvitationListResponse> invitations =
             await manager.ListInvitationsAsync(listRequest);
         OrganizationJoinSourceOperation<OrganizationEnrollmentLinkListResponse> links =
@@ -54,6 +60,8 @@ public sealed class OrganizationJoinSourceManagerTests
             await manager.DisableEnrollmentLinkAsync(new(
                 OrganizationId, EnrollmentLinkId, link.Version, "owner-a", "owner-a"));
 
+        Assert.Equal(InvitationId, selectedInvitation.Value!.InvitationId);
+        Assert.Equal(EnrollmentLinkId, selectedLink.Value!.EnrollmentLinkId);
         Assert.True(invitations.IsSuccess);
         Assert.Equal(2, invitations.Value!.Page);
         Assert.True(links.IsSuccess);
@@ -62,6 +70,8 @@ public sealed class OrganizationJoinSourceManagerTests
         Assert.Equal(OrganizationEnrollmentLinkStatus.Disabled, disabled.Value!.Status);
         Assert.Collection(
             dispatcher.Requests,
+            request => Assert.IsType<GetOrganizationInvitationQuery>(request),
+            request => Assert.IsType<GetOrganizationEnrollmentLinkQuery>(request),
             request => Assert.IsType<ListOrganizationInvitationsQuery>(request),
             request => Assert.IsType<ListOrganizationEnrollmentLinksQuery>(request),
             request => Assert.IsType<RevokeOrganizationInvitationCommand>(request),
@@ -80,6 +90,8 @@ public sealed class OrganizationJoinSourceManagerTests
         Error denied = new("Organizations.OwnerRequired", "An active owner membership is required.");
         RecordingDispatcher dispatcher = new(request => request switch
         {
+            GetOrganizationInvitationQuery =>
+                Result.Failure<OrganizationInvitationDto>(denied),
             ListOrganizationInvitationsQuery =>
                 Result.Failure<OrganizationInvitationListResponse>(denied),
             RevokeOrganizationInvitationCommand =>
@@ -88,12 +100,16 @@ public sealed class OrganizationJoinSourceManagerTests
         });
         OrganizationJoinSourceManager manager = new(dispatcher);
 
+        OrganizationJoinSourceOperation<OrganizationInvitationDto> selected =
+            await manager.GetInvitationAsync(new(OrganizationId, InvitationId, "member-a"));
         OrganizationJoinSourceOperation<OrganizationInvitationListResponse> listed =
             await manager.ListInvitationsAsync(new(OrganizationId, "member-a", 1, 25));
         OrganizationJoinSourceOperation<OrganizationInvitationDto> revoked =
             await manager.RevokeInvitationAsync(new(
                 OrganizationId, InvitationId, 4, "member-a", "member-a"));
 
+        Assert.False(selected.IsSuccess);
+        Assert.Equal(denied.Code, selected.ErrorCode);
         Assert.False(listed.IsSuccess);
         Assert.Null(listed.Value);
         Assert.Equal(denied.Code, listed.ErrorCode);
@@ -109,6 +125,7 @@ public sealed class OrganizationJoinSourceManagerTests
             throw new InvalidOperationException("The request must not be dispatched.")));
 
         await Assert.ThrowsAsync<ArgumentNullException>(() => manager.ListInvitationsAsync(null!));
+        await Assert.ThrowsAsync<ArgumentNullException>(() => manager.GetInvitationAsync(null!));
         await Assert.ThrowsAsync<ArgumentNullException>(() => manager.DisableEnrollmentLinkAsync(null!));
     }
 
