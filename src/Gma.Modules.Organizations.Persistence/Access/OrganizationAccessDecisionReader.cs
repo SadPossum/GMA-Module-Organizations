@@ -5,7 +5,7 @@ using Gma.Modules.Organizations.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
 
 internal sealed class OrganizationAccessDecisionReader(OrganizationsDbContext dbContext)
-    : IOrganizationAccessDecisionReader
+    : IOrganizationAccessDecisionReader, IOrganizationAccessCandidateFilter
 {
     public async Task<OrganizationAccessDecision> ReadAsync(
         Guid organizationId,
@@ -46,5 +46,54 @@ internal sealed class OrganizationAccessDecisionReader(OrganizationsDbContext db
             OrganizationMembershipState.Active => OrganizationAccessDecision.Allowed,
             _ => OrganizationAccessDecision.MembershipInactive
         };
+    }
+
+    public async Task<IReadOnlyList<string>> FilterAllowedAsync(
+        Guid organizationId,
+        IReadOnlyCollection<string> candidateSubjectIds,
+        CancellationToken cancellationToken)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(organizationId, Guid.Empty);
+        ArgumentNullException.ThrowIfNull(candidateSubjectIds);
+        if (candidateSubjectIds.Count > IOrganizationAccessCandidateFilter.MaximumCandidateCount)
+        {
+            throw new ArgumentOutOfRangeException(
+                nameof(candidateSubjectIds),
+                candidateSubjectIds.Count,
+                $"At most {IOrganizationAccessCandidateFilter.MaximumCandidateCount} candidates are allowed.");
+        }
+
+        string[] candidates = candidateSubjectIds
+            .Select(NormalizeCandidate)
+            .Distinct(StringComparer.Ordinal)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (candidates.Length == 0)
+        {
+            return [];
+        }
+
+        return await (
+                from organization in dbContext.Organizations.AsNoTracking()
+                join membership in dbContext.Memberships.AsNoTracking()
+                    on organization.Id equals membership.OrganizationId
+                where organization.Id == organizationId &&
+                      organization.Status == OrganizationState.Active &&
+                      membership.Status == OrganizationMembershipState.Active &&
+                      candidates.Contains(membership.SubjectId)
+                select membership.SubjectId)
+            .Distinct()
+            .OrderBy(subjectId => subjectId)
+            .ToArrayAsync(cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static string NormalizeCandidate(string candidate)
+    {
+        string normalized = candidate?.Trim() ?? string.Empty;
+        return normalized.Length is >= 1 and <= 160 &&
+               normalized.All(character => !char.IsWhiteSpace(character) && !char.IsControl(character))
+            ? normalized
+            : throw new ArgumentException("Candidate subject ids must be valid organization subject ids.", nameof(candidate));
     }
 }

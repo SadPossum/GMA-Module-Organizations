@@ -78,7 +78,7 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
     }
 
     [DockerFact]
-    public async Task Access_decisions_use_one_query_and_observe_membership_revocation()
+    public async Task Access_readers_use_one_query_and_observe_membership_revocation()
     {
         await using PostgreSqlContainer postgreSql = CreatePostgreSql("organizations_access_tests");
         await postgreSql.StartAsync();
@@ -101,6 +101,14 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
             await reader.ReadAsync(organization.Id, "subject-a", CancellationToken.None));
         Assert.Equal(1, commands.ReaderCommands);
         Assert.Empty(readerContext.ChangeTracker.Entries());
+        Assert.Equal(
+            ["subject-a"],
+            await reader.FilterAllowedAsync(
+                organization.Id,
+                ["missing", "subject-a"],
+                CancellationToken.None));
+        Assert.Equal(2, commands.ReaderCommands);
+        Assert.Empty(readerContext.ChangeTracker.Entries());
 
         await using (OrganizationsDbContext writer = CreateDbContext(connectionString))
         {
@@ -116,7 +124,12 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
         Assert.Equal(
             OrganizationAccessDecision.MembershipInactive,
             await reader.ReadAsync(organization.Id, "subject-a", CancellationToken.None));
-        Assert.Equal(2, commands.ReaderCommands);
+        Assert.Equal(3, commands.ReaderCommands);
+        Assert.Empty(await reader.FilterAllowedAsync(
+            organization.Id,
+            ["subject-a"],
+            CancellationToken.None));
+        Assert.Equal(4, commands.ReaderCommands);
         Assert.Empty(readerContext.ChangeTracker.Entries());
     }
 

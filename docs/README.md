@@ -18,6 +18,10 @@ The reusable host policy seam for owner-facing membership changes is tracked in
 The Contracts facade for product-owned source management is tracked in
 [Organizations Join Source Management Task](organizations-join-source-management-task.md).
 
+The bounded application-port filter for offline workflows that already hold a
+candidate set is tracked in
+[Organizations Access Candidate Filter Task](organizations-access-candidate-filter-task.md).
+
 ## Owned behavior
 
 - organizations and immutable organization-to-scope identity;
