@@ -45,7 +45,7 @@ internal sealed class OrganizationsRetentionService(
             }
             catch (Exception exception)
             {
-                LogIterationFailed(logger, exception.GetType().Name, exception);
+                LogIterationFailed(logger, exception.GetType().Name, null);
             }
 
             try
