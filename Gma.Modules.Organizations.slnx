@@ -31,6 +31,7 @@
     <File Path="docs/organizations-join-source-management-task.md" />
     <File Path="docs/organizations-lifecycle-consistency-task.md" />
     <File Path="docs/organizations-membership-change-policy-task.md" />
+    <File Path="docs/organizations-natural-expiry-task.md" />
     <File Path="docs/organizations-production-hardening-task.md" />
     <File Path="docs/organizations-task.md" />
   </Folder>
