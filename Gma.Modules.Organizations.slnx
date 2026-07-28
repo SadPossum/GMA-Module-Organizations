@@ -2,63 +2,57 @@
   <Folder Name="/.github/">
     <File Path=".github/dependabot.yml" />
   </Folder>
-  <Folder Name="/docs/">
-    <File Path="docs/README.md" />
-    <File Path="docs/organizations-task.md" />
-    <File Path="docs/organizations-production-hardening-task.md" />
-    <File Path="docs/organizations-lifecycle-consistency-task.md" />
-    <File Path="docs/organizations-membership-change-policy-task.md" />
-    <File Path="docs/organizations-join-source-issuance-task.md" />
-    <File Path="docs/organizations-join-source-management-task.md" />
-    <File Path="docs/organizations-access-candidate-filter-task.md" />
-  </Folder>
-  <Folder Name="/eng/">
-    <File Path="eng/bootstrap-source-roots.ps1" />
-    <File Path="eng/check-boundaries.ps1" />
-    <File Path="eng/check-migrations.ps1" />
-    <File Path="eng/check-repository-security.ps1" />
-    <File Path="eng/verify.ps1" />
-  </Folder>
   <Folder Name="/.github/workflows/">
+    <File Path=".github/workflows/release-evidence.yml" />
     <File Path=".github/workflows/security.yml" />
     <File Path=".github/workflows/validate.yml" />
   </Folder>
   <Folder Name="/Solution Items/">
     <File Path=".editorconfig" />
     <File Path=".gitattributes" />
+    <File Path=".gitignore" />
+    <File Path=".gma/release-evidence.json" />
     <File Path=".gma/repository-security.json" />
     <File Path=".gma/security-exceptions.json" />
-    <File Path=".gitignore" />
     <File Path="Directory.Build.props" />
     <File Path="Directory.Packages.props" />
-    <File Path="global.json" />
     <File Path="Gma.SourceRoots.props.example" />
     <File Path="LICENSE" />
-    <File Path="nuget.config" />
     <File Path="README.md" />
     <File Path="SECURITY.md" />
+    <File Path="SUPPORT.md" />
+    <File Path="global.json" />
+    <File Path="nuget.config" />
   </Folder>
-  <Folder Name="/src/Admin/">
+  <Folder Name="/docs/">
+    <File Path="docs/README.md" />
+    <File Path="docs/organizations-access-candidate-filter-task.md" />
+    <File Path="docs/organizations-join-source-issuance-task.md" />
+    <File Path="docs/organizations-join-source-management-task.md" />
+    <File Path="docs/organizations-lifecycle-consistency-task.md" />
+    <File Path="docs/organizations-membership-change-policy-task.md" />
+    <File Path="docs/organizations-production-hardening-task.md" />
+    <File Path="docs/organizations-task.md" />
+  </Folder>
+  <Folder Name="/eng/">
+    <File Path="eng/bootstrap-source-roots.ps1" />
+    <File Path="eng/check-boundaries.ps1" />
+    <File Path="eng/check-migrations.ps1" />
+    <File Path="eng/check-repository-release.ps1" />
+    <File Path="eng/check-repository-security.ps1" />
+    <File Path="eng/verify.ps1" />
+  </Folder>
+  <Folder Name="/src/">
     <Project Path="src/Gma.Modules.Organizations.Admin.Contracts/Gma.Modules.Organizations.Admin.Contracts.csproj" />
     <Project Path="src/Gma.Modules.Organizations.AdminApi/Gma.Modules.Organizations.AdminApi.csproj" />
     <Project Path="src/Gma.Modules.Organizations.AdminCli/Gma.Modules.Organizations.AdminCli.csproj" />
-  </Folder>
-  <Folder Name="/src/Api/">
     <Project Path="src/Gma.Modules.Organizations.Api/Gma.Modules.Organizations.Api.csproj" />
-  </Folder>
-  <Folder Name="/src/Application/">
     <Project Path="src/Gma.Modules.Organizations.Application/Gma.Modules.Organizations.Application.csproj" />
-  </Folder>
-  <Folder Name="/src/Contracts/">
     <Project Path="src/Gma.Modules.Organizations.Contracts/Gma.Modules.Organizations.Contracts.csproj" />
-  </Folder>
-  <Folder Name="/src/Domain/">
     <Project Path="src/Gma.Modules.Organizations.Domain/Gma.Modules.Organizations.Domain.csproj" />
-  </Folder>
-  <Folder Name="/src/Persistence/">
-    <Project Path="src/Gma.Modules.Organizations.Persistence/Gma.Modules.Organizations.Persistence.csproj" />
-    <Project Path="src/Gma.Modules.Organizations.Persistence.SqlServerMigrations/Gma.Modules.Organizations.Persistence.SqlServerMigrations.csproj" />
     <Project Path="src/Gma.Modules.Organizations.Persistence.PostgreSqlMigrations/Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.csproj" />
+    <Project Path="src/Gma.Modules.Organizations.Persistence.SqlServerMigrations/Gma.Modules.Organizations.Persistence.SqlServerMigrations.csproj" />
+    <Project Path="src/Gma.Modules.Organizations.Persistence/Gma.Modules.Organizations.Persistence.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/Gma.Modules.Organizations.IntegrationTests/Gma.Modules.Organizations.IntegrationTests.csproj" />
