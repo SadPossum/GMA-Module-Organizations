@@ -5,6 +5,7 @@ using Microsoft.Extensions.Options;
 internal sealed class OrganizationsOptionsValidator : IValidateOptions<OrganizationsOptions>
 {
     private const int AbsoluteMaxInvitationLifetimeHours = 24 * 365;
+    private const int AbsoluteMaxEnrollmentClaimLifetimeHours = 24 * 90;
 
     public ValidateOptionsResult Validate(string? name, OrganizationsOptions options)
     {
@@ -30,6 +31,12 @@ internal sealed class OrganizationsOptionsValidator : IValidateOptions<Organizat
         if (options.EnrollmentMaxClaims is < 1 or > 10_000)
         {
             failures.Add($"{OrganizationsOptions.SectionName}:EnrollmentMaxClaims must be between 1 and 10000.");
+        }
+
+        if (options.EnrollmentClaimLifetimeHours is < 1 or > AbsoluteMaxEnrollmentClaimLifetimeHours)
+        {
+            failures.Add(
+                $"{OrganizationsOptions.SectionName}:EnrollmentClaimLifetimeHours must be between 1 and {AbsoluteMaxEnrollmentClaimLifetimeHours}.");
         }
 
         return failures.Count == 0

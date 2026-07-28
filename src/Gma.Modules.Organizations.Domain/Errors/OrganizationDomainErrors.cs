@@ -36,5 +36,7 @@ public static class OrganizationDomainErrors
     public static readonly Error EnrollmentLinkExpired = new("Organizations.EnrollmentLinkExpired", "The enrollment link has expired.");
     public static readonly Error EnrollmentLinkUnavailable = new("Organizations.EnrollmentLinkUnavailable", "The enrollment link is unavailable.");
     public static readonly Error EnrollmentLinkCapacityReached = new("Organizations.EnrollmentLinkCapacityReached", "The enrollment link has reached its claim limit.");
+    public static readonly Error EnrollmentClaimExpiryInvalid = new("Organizations.EnrollmentClaimExpiryInvalid", "The enrollment claim expiry is invalid.");
+    public static readonly Error EnrollmentClaimExpired = new("Organizations.EnrollmentClaimExpired", "The enrollment claim has expired.");
     public static readonly Error EnrollmentClaimUnavailable = new("Organizations.EnrollmentClaimUnavailable", "The enrollment claim is unavailable.");
 }

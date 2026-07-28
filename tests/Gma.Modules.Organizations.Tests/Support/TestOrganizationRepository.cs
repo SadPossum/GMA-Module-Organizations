@@ -110,10 +110,12 @@ internal sealed class TestOrganizationRepository(
                 .Select(item => item.ToDto(nowUtc)).ToArray(), page, pageSize));
 
     public Task<OrganizationJoinRequestListResponse> ListPendingJoinRequestsAsync(
-        Guid organizationId, int page, int pageSize, CancellationToken cancellationToken) =>
+        Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc,
+        CancellationToken cancellationToken) =>
         Task.FromResult(new OrganizationJoinRequestListResponse(
             this.EnrollmentClaims.Where(item => item.OrganizationId == organizationId &&
-                                                 item.Status == OrganizationEnrollmentClaimState.Pending)
+                                                 item.Status == OrganizationEnrollmentClaimState.Pending &&
+                                                 item.DecisionExpiresAtUtc > nowUtc)
                 .Select(OrganizationMappings.ToDto).ToArray(), page, pageSize));
 
     public Task AddOrganizationAsync(Organization value, CancellationToken cancellationToken) =>

@@ -228,12 +228,14 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
         Guid organizationId,
         int page,
         int pageSize,
+        DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
         OrganizationEnrollmentClaimDto[] claims = await dbContext.EnrollmentClaims
             .AsNoTracking()
             .Where(claim => claim.OrganizationId == organizationId &&
-                            claim.Status == OrganizationEnrollmentClaimState.Pending)
+                            claim.Status == OrganizationEnrollmentClaimState.Pending &&
+                            claim.DecisionExpiresAtUtc > nowUtc)
             .OrderBy(claim => claim.CreatedAtUtc)
             .ThenBy(claim => claim.Id)
             .Skip((page - 1) * pageSize)
@@ -241,7 +243,10 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
             .Select(claim => new OrganizationEnrollmentClaimDto(
                 claim.Id, claim.EnrollmentLinkId, claim.OrganizationId, claim.SubjectId,
                 OrganizationEnrollmentClaimStatus.Pending, claim.MembershipId,
-                claim.Version, claim.CreatedAtUtc, claim.LastChangedAtUtc))
+                claim.Version, claim.CreatedAtUtc, claim.LastChangedAtUtc)
+            {
+                DecisionExpiresAtUtc = claim.DecisionExpiresAtUtc
+            })
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
         return new OrganizationJoinRequestListResponse(claims, page, pageSize);

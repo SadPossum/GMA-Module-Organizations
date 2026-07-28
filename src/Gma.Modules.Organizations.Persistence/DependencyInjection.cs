@@ -34,6 +34,19 @@ public static class DependencyInjection
                 retentionValidation.Failures);
         }
 
+        OrganizationsLifecycleOptions lifecycleOptions = builder.Configuration
+            .GetSection(OrganizationsLifecycleOptions.SectionName)
+            .Get<OrganizationsLifecycleOptions>() ?? new();
+        ValidateOptionsResult lifecycleValidation = new OrganizationsLifecycleOptionsValidator()
+            .Validate(name: null, lifecycleOptions);
+        if (lifecycleValidation.Failed)
+        {
+            throw new OptionsValidationException(
+                OrganizationsLifecycleOptions.SectionName,
+                typeof(OrganizationsLifecycleOptions),
+                lifecycleValidation.Failures);
+        }
+
         builder.Services
             .AddOptions<OrganizationsRetentionOptions>()
             .Bind(builder.Configuration.GetSection(OrganizationsRetentionOptions.SectionName))
@@ -41,6 +54,13 @@ public static class DependencyInjection
         builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<
             IValidateOptions<OrganizationsRetentionOptions>,
             OrganizationsRetentionOptionsValidator>());
+        builder.Services
+            .AddOptions<OrganizationsLifecycleOptions>()
+            .Bind(builder.Configuration.GetSection(OrganizationsLifecycleOptions.SectionName))
+            .ValidateOnStart();
+        builder.Services.TryAddEnumerable(ServiceDescriptor.Singleton<
+            IValidateOptions<OrganizationsLifecycleOptions>,
+            OrganizationsLifecycleOptionsValidator>());
 
         builder.Services.TryAddModuleDbContext<OrganizationsDbContext>(options =>
             options.UseConfiguredProvider(
@@ -57,6 +77,7 @@ public static class DependencyInjection
         builder.Services.TryAddScoped<IOrganizationAccessDecisionReader, OrganizationAccessDecisionReader>();
         builder.Services.TryAddScoped<IOrganizationAccessCandidateFilter, OrganizationAccessDecisionReader>();
         builder.Services.TryAddScoped<IOrganizationRepository, OrganizationRepository>();
+        builder.Services.TryAddScoped<IOrganizationLifecycleRepository, OrganizationLifecycleRepository>();
         builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped(
             typeof(ICommandPipelineBehavior<,>),
             typeof(OrganizationsPersistenceRetryBehavior<,>)));
@@ -66,6 +87,12 @@ public static class DependencyInjection
         {
             builder.Services.TryAddEnumerable(
                 ServiceDescriptor.Singleton<IHostedService, OrganizationsRetentionService>());
+        }
+
+        if (lifecycleOptions.Enabled)
+        {
+            builder.Services.TryAddEnumerable(
+                ServiceDescriptor.Singleton<IHostedService, OrganizationsLifecycleService>());
         }
 
         return builder;

@@ -11,6 +11,7 @@ using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
+using Microsoft.Extensions.Options;
 using DomainApprovalMode = Gma.Modules.Organizations.Domain.Enums.OrganizationEnrollmentApprovalMode;
 
 internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
@@ -18,7 +19,9 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
     IOrganizationEnrollmentTokenService tokens,
     OrganizationJoinAdmissionPolicy joinAdmissionPolicy,
     ISystemClock clock,
-    IIdGenerator ids) : ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>
+    IIdGenerator ids,
+    IOptions<OrganizationsOptions> options)
+    : ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>
 {
     public async Task<Result<OrganizationEnrollmentOutcomeDto>> HandleAsync(
         ClaimOrganizationEnrollmentLinkCommand command,
@@ -49,6 +52,13 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
             link.Id, command.SubjectId, cancellationToken).ConfigureAwait(false);
         if (existingClaim is not null)
         {
+            DateTimeOffset observedAtUtc = clock.UtcNow;
+            if (existingClaim.IsDecisionDue(observedAtUtc))
+            {
+                return OrganizationEnrollmentClaimExpiry.Expire(
+                    existingClaim, link, existingClaim.Version, observedAtUtc, ids);
+            }
+
             return await CreateExistingOutcomeAsync(
                 organization, existingClaim, command.SubjectId, cancellationToken).ConfigureAwait(false);
         }
@@ -118,7 +128,8 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
         Result<OrganizationEnrollmentClaim> claim = OrganizationEnrollmentClaim.Create(
             ids.NewId(), link.OrganizationId, link.Id, command.SubjectId,
             OrganizationEnrollmentClaimState.Pending, null,
-            command.ActorId, ids.NewId(), nowUtc);
+            command.ActorId, ids.NewId(), nowUtc,
+            nowUtc.AddHours(options.Value.EnrollmentClaimLifetimeHours));
         if (claim.IsFailure)
         {
             return Result.Failure<OrganizationEnrollmentOutcomeDto>(claim.Error);
@@ -138,6 +149,11 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
         {
             return Result.Failure<OrganizationEnrollmentOutcomeDto>(
                 Gma.Modules.Organizations.Domain.Errors.OrganizationDomainErrors.EnrollmentClaimUnavailable);
+        }
+
+        if (claim.Status == OrganizationEnrollmentClaimState.Expired)
+        {
+            return Result.Success(new OrganizationEnrollmentOutcomeDto(claim.ToDto(), null));
         }
 
         if (claim.Status == OrganizationEnrollmentClaimState.Pending)

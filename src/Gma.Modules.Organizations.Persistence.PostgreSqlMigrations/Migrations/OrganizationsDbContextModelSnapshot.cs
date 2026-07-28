@@ -209,6 +209,9 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
                     b.Property<DateTimeOffset>("CreatedAtUtc")
                         .HasColumnType("timestamp with time zone");
 
+                    b.Property<DateTimeOffset?>("DecisionExpiresAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
                     b.Property<Guid>("EnrollmentLinkId")
                         .HasColumnType("uuid");
 
@@ -244,6 +247,8 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
 
                     b.HasIndex("EnrollmentLinkId", "SubjectId")
                         .IsUnique();
+
+                    b.HasIndex("Status", "DecisionExpiresAtUtc");
 
                     b.HasIndex("OrganizationId", "Status", "CreatedAtUtc");
 

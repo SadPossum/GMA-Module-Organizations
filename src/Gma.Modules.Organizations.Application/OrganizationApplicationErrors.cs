@@ -42,5 +42,6 @@ public static class OrganizationApplicationErrors
     public static Error EnrollmentLinkExpired => OrganizationDomainErrors.EnrollmentLinkExpired;
     public static Error EnrollmentLinkUnavailable => OrganizationDomainErrors.EnrollmentLinkUnavailable;
     public static Error EnrollmentLinkCapacityReached => OrganizationDomainErrors.EnrollmentLinkCapacityReached;
+    public static Error EnrollmentClaimExpired => OrganizationDomainErrors.EnrollmentClaimExpired;
     public static Error EnrollmentClaimUnavailable => OrganizationDomainErrors.EnrollmentClaimUnavailable;
 }

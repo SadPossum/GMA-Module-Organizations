@@ -59,6 +59,22 @@ internal sealed class OrganizationInvitationChangedOutboxProjector(IOutboxWriter
             cancellationToken);
 }
 
+internal sealed class OrganizationInvitationExpiredOutboxProjector(IOutboxWriterRegistry writers)
+    : IDomainEventHandler<OrganizationInvitationExpiredDomainEvent>
+{
+    public Task HandleAsync(OrganizationInvitationExpiredDomainEvent e, CancellationToken cancellationToken) =>
+        writers.GetRequired(OrganizationsModuleMetadata.Name).EnqueueAsync(
+            new OrganizationInvitationExpiredIntegrationEvent(
+                e.EventId,
+                e.OccurredAtUtc,
+                e.OrganizationId.ToString("D"),
+                e.OrganizationId,
+                e.InvitationId,
+                e.ExpiresAtUtc,
+                e.InvitationVersion),
+            cancellationToken);
+}
+
 internal sealed class OrganizationEnrollmentLinkChangedOutboxProjector(IOutboxWriterRegistry writers)
     : IDomainEventHandler<OrganizationEnrollmentLinkChangedDomainEvent>
 {
@@ -70,6 +86,16 @@ internal sealed class OrganizationEnrollmentLinkChangedOutboxProjector(IOutboxWr
                 OrganizationMappings.MapStatus(e.Status), e.ReservedClaims, e.LinkVersion), cancellationToken);
 }
 
+internal sealed class OrganizationEnrollmentLinkExpiredOutboxProjector(IOutboxWriterRegistry writers)
+    : IDomainEventHandler<OrganizationEnrollmentLinkExpiredDomainEvent>
+{
+    public Task HandleAsync(OrganizationEnrollmentLinkExpiredDomainEvent e, CancellationToken cancellationToken) =>
+        writers.GetRequired(OrganizationsModuleMetadata.Name).EnqueueAsync(
+            new OrganizationEnrollmentLinkExpiredIntegrationEvent(
+                e.EventId, e.OccurredAtUtc, e.OrganizationId.ToString("D"), e.OrganizationId,
+                e.EnrollmentLinkId, e.ExpiresAtUtc, e.LinkVersion), cancellationToken);
+}
+
 internal sealed class OrganizationEnrollmentClaimChangedOutboxProjector(IOutboxWriterRegistry writers)
     : IDomainEventHandler<OrganizationEnrollmentClaimChangedDomainEvent>
 {
@@ -79,4 +105,17 @@ internal sealed class OrganizationEnrollmentClaimChangedOutboxProjector(IOutboxW
                 e.EventId, e.OccurredAtUtc, e.OrganizationId.ToString("D"), e.OrganizationId,
                 e.EnrollmentLinkId, e.ClaimId, e.SubjectId, OrganizationMappings.MapChange(e.ChangeKind),
                 OrganizationMappings.MapStatus(e.Status), e.MembershipId, e.ClaimVersion), cancellationToken);
+}
+
+internal sealed class OrganizationEnrollmentClaimExpiredOutboxProjector(IOutboxWriterRegistry writers)
+    : IDomainEventHandler<OrganizationEnrollmentClaimExpiredDomainEvent>
+{
+    public Task HandleAsync(
+        OrganizationEnrollmentClaimExpiredDomainEvent e,
+        CancellationToken cancellationToken) =>
+        writers.GetRequired(OrganizationsModuleMetadata.Name).EnqueueAsync(
+            new OrganizationEnrollmentClaimExpiredIntegrationEvent(
+                e.EventId, e.OccurredAtUtc, e.OrganizationId.ToString("D"), e.OrganizationId,
+                e.EnrollmentLinkId, e.ClaimId, e.DecisionExpiresAtUtc, e.ClaimVersion),
+            cancellationToken);
 }

@@ -22,7 +22,12 @@ public interface IOrganizationRepository
     Task<OrganizationMemberListResponse> ListMembersAsync(Guid organizationId, int page, int pageSize, CancellationToken cancellationToken);
     Task<OrganizationInvitationListResponse> ListInvitationsAsync(Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken cancellationToken);
     Task<OrganizationEnrollmentLinkListResponse> ListEnrollmentLinksAsync(Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken cancellationToken);
-    Task<OrganizationJoinRequestListResponse> ListPendingJoinRequestsAsync(Guid organizationId, int page, int pageSize, CancellationToken cancellationToken);
+    Task<OrganizationJoinRequestListResponse> ListPendingJoinRequestsAsync(
+        Guid organizationId,
+        int page,
+        int pageSize,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken);
     Task AddOrganizationAsync(Organization organization, CancellationToken cancellationToken);
     Task AddMembershipAsync(OrganizationMembership membership, CancellationToken cancellationToken);
     Task AddInvitationAsync(OrganizationInvitation invitation, CancellationToken cancellationToken);

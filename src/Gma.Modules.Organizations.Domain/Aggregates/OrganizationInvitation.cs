@@ -154,6 +154,37 @@ public sealed class OrganizationInvitation : AggregateRoot<Guid>
         this.EndPending(OrganizationInvitationState.Superseded, OrganizationInvitationChangeKind.Superseded,
             expectedVersion, actorId, eventId, nowUtc);
 
+    public Result Expire(long expectedVersion, string actorId, Guid eventId, DateTimeOffset nowUtc)
+    {
+        if (expectedVersion != this.Version)
+        {
+            return Result.Failure(OrganizationDomainErrors.VersionConflict);
+        }
+
+        Result<OrganizationActorId> actor = OrganizationActorId.Create(actorId);
+        if (actor.IsFailure || eventId == Guid.Empty)
+        {
+            return actor.IsFailure ? Result.Failure(actor.Error) :
+                Result.Failure(OrganizationDomainErrors.EventIdRequired);
+        }
+
+        if (this.Status != OrganizationInvitationState.Pending)
+        {
+            return Result.Failure(OrganizationDomainErrors.InvitationUnavailable);
+        }
+
+        if (this.ExpiresAtUtc > nowUtc)
+        {
+            return Result.Failure(OrganizationDomainErrors.InvitationExpiryInvalid);
+        }
+
+        this.Status = OrganizationInvitationState.Expired;
+        this.Advance(actor.Value.Value, nowUtc);
+        this.RaiseDomainEvent(new OrganizationInvitationExpiredDomainEvent(
+            eventId, nowUtc, this.OrganizationId, this.Id, this.ExpiresAtUtc, this.Version));
+        return Result.Success();
+    }
+
     private Result EndPending(
         OrganizationInvitationState state,
         OrganizationInvitationChangeKind change,

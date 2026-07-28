@@ -150,6 +150,10 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
         OrganizationInvitation recentInvitation = OrganizationInvitation.Create(
             Guid.NewGuid(), organization.Id, "owner", "recent@example.test", new string('b', 64),
             recentExpiryUtc, "user:owner", Guid.NewGuid(), Now.AddDays(-2)).Value;
+        Assert.True(oldInvitation.Expire(
+            oldInvitation.Version, "system:lifecycle", Guid.NewGuid(), oldExpiryUtc).IsSuccess);
+        Assert.True(recentInvitation.Expire(
+            recentInvitation.Version, "system:lifecycle", Guid.NewGuid(), recentExpiryUtc).IsSuccess);
         OrganizationEnrollmentLink resolvedLink = OrganizationEnrollmentLink.Create(
             Guid.NewGuid(), organization.Id, "owner", new string('c', 64), oldExpiryUtc, 10,
             OrganizationEnrollmentApprovalMode.Automatic,
@@ -160,6 +164,8 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
             Guid.NewGuid(), organization.Id, resolvedLink.Id, "accepted-subject",
             OrganizationEnrollmentClaimState.Accepted, membership.Id,
             "user:accepted-subject", Guid.NewGuid(), oldCreatedAtUtc.AddHours(1)).Value;
+        Assert.True(resolvedLink.Expire(
+            resolvedLink.Version, "system:lifecycle", Guid.NewGuid(), oldExpiryUtc).IsSuccess);
         OrganizationEnrollmentLink pendingLink = OrganizationEnrollmentLink.Create(
             Guid.NewGuid(), organization.Id, "owner", new string('d', 64), oldExpiryUtc, 10,
             OrganizationEnrollmentApprovalMode.RequiresApproval,
@@ -231,10 +237,14 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
         Guid organizationId,
         Guid linkId,
         string subjectId,
-        DateTimeOffset? createdAtUtc = null) => OrganizationEnrollmentClaim.Create(
+        DateTimeOffset? createdAtUtc = null)
+    {
+        DateTimeOffset created = createdAtUtc ?? Now.AddMinutes(1);
+        return OrganizationEnrollmentClaim.Create(
             Guid.NewGuid(), organizationId, linkId, subjectId,
             OrganizationEnrollmentClaimState.Pending, null,
-            $"user:{subjectId}", Guid.NewGuid(), createdAtUtc ?? Now.AddMinutes(1)).Value;
+            $"user:{subjectId}", Guid.NewGuid(), created, created.AddDays(7)).Value;
+    }
 
     private static Organization CreateOrganization(string name, string slug) => Organization.Create(
         Guid.NewGuid(), name, slug, "user:owner", Guid.NewGuid(), Now).Value;

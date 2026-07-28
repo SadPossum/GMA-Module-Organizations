@@ -366,7 +366,9 @@ public sealed class OrganizationInvitationFlowTests
             Task.FromResult(new OrganizationInvitationListResponse([], page, pageSize));
         public Task<OrganizationEnrollmentLinkListResponse> ListEnrollmentLinksAsync(Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken cancellationToken) =>
             Task.FromResult(new OrganizationEnrollmentLinkListResponse([], page, pageSize));
-        public Task<OrganizationJoinRequestListResponse> ListPendingJoinRequestsAsync(Guid organizationId, int page, int pageSize, CancellationToken cancellationToken) =>
+        public Task<OrganizationJoinRequestListResponse> ListPendingJoinRequestsAsync(
+            Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc,
+            CancellationToken cancellationToken) =>
             Task.FromResult(new OrganizationJoinRequestListResponse([], page, pageSize));
         public Task AddOrganizationAsync(Organization value, CancellationToken cancellationToken)
         {

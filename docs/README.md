@@ -22,6 +22,10 @@ The bounded application-port filter for offline workflows that already hold a
 candidate set is tracked in
 [Organizations Access Candidate Filter Task](organizations-access-candidate-filter-task.md).
 
+The durable natural-expiry lifecycle for invitations, enrollment links, and
+pending join requests is tracked in
+[Organizations Natural Expiry Task](organizations-natural-expiry-task.md).
+
 ## Owned behavior
 
 - organizations and immutable organization-to-scope identity;
@@ -48,7 +52,14 @@ The administration surface lives under `/api/admin/organizations` and uses globa
     "InvitationMaxLifetimeHours": 720,
     "EnrollmentDefaultLifetimeHours": 24,
     "EnrollmentMaxLifetimeHours": 720,
+    "EnrollmentClaimLifetimeHours": 168,
     "EnrollmentMaxClaims": 1000,
+    "Lifecycle": {
+      "Enabled": false,
+      "BatchSize": 100,
+      "MaxBatchesPerCategoryPerCycle": 4,
+      "IntervalMinutes": 5
+    },
     "Retention": {
       "Enabled": false,
       "InvitationHistoryDays": 90,
@@ -67,6 +78,12 @@ Recipient-bound invitations fail closed unless a host or extension replaces `IOr
 
 Token plaintext is returned once at issuance; only purpose-separated SHA-256 digests are persisted. All mutable aggregates carry optimistic versions, persistence uses a durable outbox, and PostgreSQL container tests prove bounded-claim concurrency and organization/subject isolation.
 
-Domain retention is disabled by default and should be enabled deliberately on a host responsible for Organizations maintenance. Cleanup is bounded and removes only old expired or terminal invitations, resolved claims whose parent link is terminal, and terminal links with no remaining claims. Pending join requests, organizations, memberships, active links, and message-journal recovery records are preserved.
+Natural lifecycle processing and domain retention are disabled by default. Enable
+both deliberately on one host responsible for Organizations maintenance.
+Lifecycle processing durably expires due invitations, enrollment links, and
+pending join requests before cleanup. Retention is bounded and removes only old
+persisted terminal invitations, resolved claims whose parent link is terminal,
+and terminal links with no remaining claims. Organizations, memberships, active
+sources, pending requests, and message-journal recovery records are preserved.
 
 Run `eng/verify.ps1` for boundaries, build, migration drift, unit tests, vulnerability audit, and PostgreSQL tests. Use `-SkipDocker` only when container tests are intentionally unavailable.

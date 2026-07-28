@@ -45,13 +45,25 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
                 OrganizationApplicationErrors.EnrollmentLinkNotFound);
         }
 
+        if (command.Decision is not OrganizationJoinRequestDecision.Approve and
+            not OrganizationJoinRequestDecision.Reject)
+        {
+            return Result.Failure<OrganizationEnrollmentOutcomeDto>(
+                OrganizationApplicationErrors.EnrollmentDecisionInvalid);
+        }
+
+        DateTimeOffset nowUtc = clock.UtcNow;
+        if (claim.IsDecisionDue(nowUtc))
+        {
+            return OrganizationEnrollmentClaimExpiry.Expire(
+                claim, link, command.ExpectedClaimVersion, nowUtc, ids);
+        }
+
         return command.Decision switch
         {
             OrganizationJoinRequestDecision.Approve => await this.ApproveAsync(
-                command, claim, link, cancellationToken).ConfigureAwait(false),
-            OrganizationJoinRequestDecision.Reject => this.Reject(command, claim, link),
-            _ => Result.Failure<OrganizationEnrollmentOutcomeDto>(
-                OrganizationApplicationErrors.EnrollmentDecisionInvalid)
+                command, claim, link, nowUtc, cancellationToken).ConfigureAwait(false),
+            _ => this.Reject(command, claim, link, nowUtc)
         };
     }
 
@@ -59,6 +71,7 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
         ResolveOrganizationJoinRequestCommand command,
         OrganizationEnrollmentClaim claim,
         OrganizationEnrollmentLink link,
+        DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
         if (claim.Version != command.ExpectedClaimVersion)
@@ -98,7 +111,6 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
                 OrganizationApplicationErrors.JoinAdmissionRejected);
         }
 
-        DateTimeOffset nowUtc = clock.UtcNow;
         Result<OrganizationMembership> membership = await OrganizationMemberProvisioning.EnsureActiveMemberAsync(
             organizations, organization.Id, claim.SubjectId, command.ActorId,
             nowUtc, ids, cancellationToken).ConfigureAwait(false);
@@ -120,14 +132,19 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
     private Result<OrganizationEnrollmentOutcomeDto> Reject(
         ResolveOrganizationJoinRequestCommand command,
         OrganizationEnrollmentClaim claim,
-        OrganizationEnrollmentLink link)
+        OrganizationEnrollmentLink link,
+        DateTimeOffset nowUtc)
     {
-        DateTimeOffset nowUtc = clock.UtcNow;
         Result rejected = claim.Reject(
             command.ExpectedClaimVersion, command.ActorId, ids.NewId(), nowUtc);
         if (rejected.IsFailure)
         {
             return Result.Failure<OrganizationEnrollmentOutcomeDto>(rejected.Error);
+        }
+
+        if (link.Status != OrganizationEnrollmentLinkState.Active || link.ReservedClaims == 0)
+        {
+            return Result.Success(new OrganizationEnrollmentOutcomeDto(claim.ToDto(), null));
         }
 
         Result released = link.ReleaseClaim(

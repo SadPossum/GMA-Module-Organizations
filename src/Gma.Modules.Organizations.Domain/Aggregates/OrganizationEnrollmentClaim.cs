@@ -17,6 +17,7 @@ public sealed class OrganizationEnrollmentClaim : AggregateRoot<Guid>
     public string SubjectId { get; private set; } = string.Empty;
     public OrganizationEnrollmentClaimState Status { get; private set; }
     public Guid? MembershipId { get; private set; }
+    public DateTimeOffset? DecisionExpiresAtUtc { get; private set; }
     public long Version { get; private set; } = 1;
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public string LastChangedBy { get; private set; } = string.Empty;
@@ -31,18 +32,24 @@ public sealed class OrganizationEnrollmentClaim : AggregateRoot<Guid>
         Guid? membershipId,
         string actorId,
         Guid eventId,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc,
+        DateTimeOffset? decisionExpiresAtUtc = null)
     {
         Result<OrganizationSubjectId> subject = OrganizationSubjectId.Create(subjectId);
         Result<OrganizationActorId> actor = OrganizationActorId.Create(actorId);
         bool valid = id != Guid.Empty && organizationId != Guid.Empty && enrollmentLinkId != Guid.Empty &&
             status is OrganizationEnrollmentClaimState.Pending or OrganizationEnrollmentClaimState.Accepted &&
-            (status == OrganizationEnrollmentClaimState.Pending ? membershipId is null : membershipId is not null);
+            (status == OrganizationEnrollmentClaimState.Pending
+                ? membershipId is null && decisionExpiresAtUtc > nowUtc
+                : membershipId is not null && decisionExpiresAtUtc is null);
         if (subject.IsFailure || actor.IsFailure || !valid || eventId == Guid.Empty)
         {
             Error error = subject.IsFailure ? subject.Error : actor.IsFailure ? actor.Error :
                 eventId == Guid.Empty ? OrganizationDomainErrors.EventIdRequired :
-                OrganizationDomainErrors.EnrollmentConfigurationInvalid;
+                status == OrganizationEnrollmentClaimState.Pending &&
+                (decisionExpiresAtUtc is null || decisionExpiresAtUtc <= nowUtc)
+                    ? OrganizationDomainErrors.EnrollmentClaimExpiryInvalid
+                    : OrganizationDomainErrors.EnrollmentConfigurationInvalid;
             return Result.Failure<OrganizationEnrollmentClaim>(error);
         }
 
@@ -53,6 +60,7 @@ public sealed class OrganizationEnrollmentClaim : AggregateRoot<Guid>
             SubjectId = subject.Value.Value,
             Status = status,
             MembershipId = membershipId,
+            DecisionExpiresAtUtc = decisionExpiresAtUtc,
             CreatedAtUtc = nowUtc,
             LastChangedBy = actor.Value.Value,
             LastChangedAtUtc = nowUtc
@@ -65,7 +73,7 @@ public sealed class OrganizationEnrollmentClaim : AggregateRoot<Guid>
 
     public Result Approve(Guid membershipId, long expectedVersion, string actorId, Guid eventId, DateTimeOffset nowUtc)
     {
-        Result pending = this.EnsurePending(expectedVersion, actorId, eventId);
+        Result pending = this.EnsurePending(expectedVersion, actorId, eventId, nowUtc);
         if (pending.IsFailure || membershipId == Guid.Empty)
         {
             return pending.IsFailure ? pending : Result.Failure(OrganizationDomainErrors.MembershipIdRequired);
@@ -80,7 +88,7 @@ public sealed class OrganizationEnrollmentClaim : AggregateRoot<Guid>
 
     public Result Reject(long expectedVersion, string actorId, Guid eventId, DateTimeOffset nowUtc)
     {
-        Result pending = this.EnsurePending(expectedVersion, actorId, eventId);
+        Result pending = this.EnsurePending(expectedVersion, actorId, eventId, nowUtc);
         if (pending.IsFailure)
         {
             return pending;
@@ -92,7 +100,11 @@ public sealed class OrganizationEnrollmentClaim : AggregateRoot<Guid>
         return Result.Success();
     }
 
-    private Result EnsurePending(long expectedVersion, string actorId, Guid eventId)
+    public bool IsDecisionDue(DateTimeOffset nowUtc) =>
+        this.Status == OrganizationEnrollmentClaimState.Pending &&
+        (this.DecisionExpiresAtUtc is null || this.DecisionExpiresAtUtc <= nowUtc);
+
+    public Result Expire(long expectedVersion, string actorId, Guid eventId, DateTimeOffset nowUtc)
     {
         if (expectedVersion != this.Version)
         {
@@ -106,9 +118,55 @@ public sealed class OrganizationEnrollmentClaim : AggregateRoot<Guid>
                 Result.Failure(OrganizationDomainErrors.EventIdRequired);
         }
 
-        return this.Status == OrganizationEnrollmentClaimState.Pending
-            ? Result.Success()
-            : Result.Failure(OrganizationDomainErrors.EnrollmentClaimUnavailable);
+        if (this.Status != OrganizationEnrollmentClaimState.Pending)
+        {
+            return Result.Failure(OrganizationDomainErrors.EnrollmentClaimUnavailable);
+        }
+
+        if (this.DecisionExpiresAtUtc is not { } expiresAtUtc || expiresAtUtc > nowUtc)
+        {
+            return Result.Failure(OrganizationDomainErrors.EnrollmentClaimExpiryInvalid);
+        }
+
+        this.Status = OrganizationEnrollmentClaimState.Expired;
+        this.Advance(actor.Value.Value, nowUtc);
+        this.RaiseDomainEvent(new OrganizationEnrollmentClaimExpiredDomainEvent(
+            eventId, nowUtc, this.OrganizationId, this.EnrollmentLinkId,
+            this.Id, expiresAtUtc, this.Version));
+        return Result.Success();
+    }
+
+    private Result EnsurePending(
+        long expectedVersion,
+        string actorId,
+        Guid eventId,
+        DateTimeOffset nowUtc)
+    {
+        if (expectedVersion != this.Version)
+        {
+            return Result.Failure(OrganizationDomainErrors.VersionConflict);
+        }
+
+        Result<OrganizationActorId> actor = OrganizationActorId.Create(actorId);
+        if (actor.IsFailure || eventId == Guid.Empty)
+        {
+            return actor.IsFailure ? Result.Failure(actor.Error) :
+                Result.Failure(OrganizationDomainErrors.EventIdRequired);
+        }
+
+        if (this.Status != OrganizationEnrollmentClaimState.Pending)
+        {
+            return Result.Failure(OrganizationDomainErrors.EnrollmentClaimUnavailable);
+        }
+
+        if (this.DecisionExpiresAtUtc is null)
+        {
+            return Result.Failure(OrganizationDomainErrors.EnrollmentClaimExpiryInvalid);
+        }
+
+        return this.DecisionExpiresAtUtc <= nowUtc
+            ? Result.Failure(OrganizationDomainErrors.EnrollmentClaimExpired)
+            : Result.Success();
     }
 
     private void Advance(string actorId, DateTimeOffset nowUtc)

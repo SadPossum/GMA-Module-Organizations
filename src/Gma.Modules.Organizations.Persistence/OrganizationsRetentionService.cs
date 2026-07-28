@@ -105,11 +105,9 @@ internal sealed class OrganizationsRetentionService(
         Guid[] invitationIds = await dbContext.Invitations
             .AsNoTracking()
             .Where(invitation =>
-                (invitation.Status == OrganizationInvitationState.Pending &&
-                 invitation.ExpiresAtUtc <= cutoffUtc) ||
-                (invitation.Status != OrganizationInvitationState.Pending &&
-                 invitation.LastChangedAtUtc <= cutoffUtc))
-            .OrderBy(invitation => invitation.ExpiresAtUtc)
+                invitation.Status != OrganizationInvitationState.Pending &&
+                invitation.LastChangedAtUtc <= cutoffUtc)
+            .OrderBy(invitation => invitation.LastChangedAtUtc)
             .ThenBy(invitation => invitation.Id)
             .Select(invitation => invitation.Id)
             .Take(batchSize)
@@ -135,10 +133,8 @@ internal sealed class OrganizationsRetentionService(
             join link in dbContext.EnrollmentLinks.AsNoTracking()
                 on claim.EnrollmentLinkId equals link.Id
             where claim.Status != OrganizationEnrollmentClaimState.Pending &&
-                  ((link.Status == OrganizationEnrollmentLinkState.Active &&
-                    link.ExpiresAtUtc <= cutoffUtc) ||
-                   (link.Status != OrganizationEnrollmentLinkState.Active &&
-                    link.LastChangedAtUtc <= cutoffUtc))
+                  link.Status != OrganizationEnrollmentLinkState.Active &&
+                  link.LastChangedAtUtc <= cutoffUtc
             orderby claim.LastChangedAtUtc, claim.Id
             select claim.Id)
             .Take(batchSize)
@@ -162,12 +158,10 @@ internal sealed class OrganizationsRetentionService(
         Guid[] linkIds = await dbContext.EnrollmentLinks
             .AsNoTracking()
             .Where(link =>
-                ((link.Status == OrganizationEnrollmentLinkState.Active &&
-                  link.ExpiresAtUtc <= cutoffUtc) ||
-                 (link.Status != OrganizationEnrollmentLinkState.Active &&
-                  link.LastChangedAtUtc <= cutoffUtc)) &&
+                link.Status != OrganizationEnrollmentLinkState.Active &&
+                link.LastChangedAtUtc <= cutoffUtc &&
                 !dbContext.EnrollmentClaims.Any(claim => claim.EnrollmentLinkId == link.Id))
-            .OrderBy(link => link.ExpiresAtUtc)
+            .OrderBy(link => link.LastChangedAtUtc)
             .ThenBy(link => link.Id)
             .Select(link => link.Id)
             .Take(batchSize)

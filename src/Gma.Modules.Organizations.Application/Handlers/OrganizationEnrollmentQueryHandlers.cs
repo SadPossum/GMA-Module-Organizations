@@ -97,7 +97,9 @@ internal sealed class GetOrganizationEnrollmentLinkQueryHandler(
     }
 }
 
-internal sealed class ListOrganizationJoinRequestsQueryHandler(IOrganizationRepository organizations)
+internal sealed class ListOrganizationJoinRequestsQueryHandler(
+    IOrganizationRepository organizations,
+    ISystemClock clock)
     : IQueryHandler<ListOrganizationJoinRequestsQuery, OrganizationJoinRequestListResponse>
 {
     public async Task<Result<OrganizationJoinRequestListResponse>> HandleAsync(
@@ -113,6 +115,7 @@ internal sealed class ListOrganizationJoinRequestsQueryHandler(IOrganizationRepo
 
         PageRequest page = PageRequest.Normalize(query.Page, query.PageSize);
         return Result.Success(await organizations.ListPendingJoinRequestsAsync(
-            query.OrganizationId, page.Page, page.PageSize, cancellationToken).ConfigureAwait(false));
+            query.OrganizationId, page.Page, page.PageSize, clock.UtcNow, cancellationToken)
+            .ConfigureAwait(false));
     }
 }

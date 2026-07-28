@@ -6,5 +6,6 @@ public enum OrganizationInvitationState
     Pending = 1,
     Accepted = 2,
     Revoked = 3,
-    Superseded = 4
+    Superseded = 4,
+    Expired = 5
 }

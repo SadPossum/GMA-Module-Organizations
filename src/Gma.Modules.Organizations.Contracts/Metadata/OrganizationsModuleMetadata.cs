@@ -23,7 +23,10 @@ public static class OrganizationsModuleMetadata
         .WithPublishedEvent<OrganizationChangedIntegrationEvent>()
         .WithPublishedEvent<OrganizationMembershipChangedIntegrationEvent>()
         .WithPublishedEvent<OrganizationInvitationChangedIntegrationEvent>()
+        .WithPublishedEvent<OrganizationInvitationExpiredIntegrationEvent>()
         .WithPublishedEvent<OrganizationEnrollmentLinkChangedIntegrationEvent>()
+        .WithPublishedEvent<OrganizationEnrollmentLinkExpiredIntegrationEvent>()
         .WithPublishedEvent<OrganizationEnrollmentClaimChangedIntegrationEvent>()
+        .WithPublishedEvent<OrganizationEnrollmentClaimExpiredIntegrationEvent>()
         .Build();
 }

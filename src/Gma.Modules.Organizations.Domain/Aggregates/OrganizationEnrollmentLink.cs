@@ -138,6 +138,31 @@ public sealed class OrganizationEnrollmentLink : AggregateRoot<Guid>
         this.End(OrganizationEnrollmentLinkState.Rotated, OrganizationEnrollmentLinkChangeKind.Rotated,
             expectedVersion, actorId, eventId, nowUtc);
 
+    public Result Expire(long expectedVersion, string actorId, Guid eventId, DateTimeOffset nowUtc)
+    {
+        Result mutable = this.EnsureMutable(expectedVersion, actorId, eventId);
+        if (mutable.IsFailure)
+        {
+            return mutable;
+        }
+
+        if (this.Status != OrganizationEnrollmentLinkState.Active)
+        {
+            return Result.Failure(OrganizationDomainErrors.EnrollmentLinkUnavailable);
+        }
+
+        if (this.ExpiresAtUtc > nowUtc)
+        {
+            return Result.Failure(OrganizationDomainErrors.EnrollmentConfigurationInvalid);
+        }
+
+        this.Status = OrganizationEnrollmentLinkState.Expired;
+        this.Advance(actorId.Trim(), nowUtc);
+        this.RaiseDomainEvent(new OrganizationEnrollmentLinkExpiredDomainEvent(
+            eventId, nowUtc, this.OrganizationId, this.Id, this.ExpiresAtUtc, this.Version));
+        return Result.Success();
+    }
+
     private Result End(
         OrganizationEnrollmentLinkState status,
         OrganizationEnrollmentLinkChangeKind change,
@@ -155,6 +180,11 @@ public sealed class OrganizationEnrollmentLink : AggregateRoot<Guid>
         if (this.Status != OrganizationEnrollmentLinkState.Active)
         {
             return Result.Failure(OrganizationDomainErrors.EnrollmentLinkUnavailable);
+        }
+
+        if (this.ExpiresAtUtc <= nowUtc)
+        {
+            return Result.Failure(OrganizationDomainErrors.EnrollmentLinkExpired);
         }
 
         this.Status = status;

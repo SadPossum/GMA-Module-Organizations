@@ -9,4 +9,7 @@ public sealed record OrganizationEnrollmentClaimDto(
     Guid? MembershipId,
     long Version,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset LastChangedAtUtc);
+    DateTimeOffset LastChangedAtUtc)
+{
+    public DateTimeOffset? DecisionExpiresAtUtc { get; init; }
+}

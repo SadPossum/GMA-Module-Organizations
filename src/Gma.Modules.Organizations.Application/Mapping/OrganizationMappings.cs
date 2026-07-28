@@ -65,7 +65,10 @@ public static class OrganizationMappings
     public static OrganizationEnrollmentClaimDto ToDto(this OrganizationEnrollmentClaim claim) => new(
         claim.Id, claim.EnrollmentLinkId, claim.OrganizationId, claim.SubjectId,
         MapStatus(claim.Status), claim.MembershipId, claim.Version,
-        claim.CreatedAtUtc, claim.LastChangedAtUtc);
+        claim.CreatedAtUtc, claim.LastChangedAtUtc)
+    {
+        DecisionExpiresAtUtc = claim.DecisionExpiresAtUtc
+    };
 
     public static OrganizationStatus MapStatus(DomainOrganizationState status) => status switch
     {
@@ -125,6 +128,7 @@ public static class OrganizationMappings
                 DomainInvitationState.Accepted => OrganizationInvitationStatus.Accepted,
                 DomainInvitationState.Revoked => OrganizationInvitationStatus.Revoked,
                 DomainInvitationState.Superseded => OrganizationInvitationStatus.Superseded,
+                DomainInvitationState.Expired => OrganizationInvitationStatus.Expired,
                 _ => OrganizationInvitationStatus.Unknown
             };
 
@@ -134,6 +138,7 @@ public static class OrganizationMappings
         DomainInvitationState.Accepted => OrganizationInvitationStatus.Accepted,
         DomainInvitationState.Revoked => OrganizationInvitationStatus.Revoked,
         DomainInvitationState.Superseded => OrganizationInvitationStatus.Superseded,
+        DomainInvitationState.Expired => OrganizationInvitationStatus.Expired,
         _ => OrganizationInvitationStatus.Unknown
     };
 
@@ -169,6 +174,7 @@ public static class OrganizationMappings
         DomainEnrollmentLinkState.Active => OrganizationEnrollmentLinkStatus.Active,
         DomainEnrollmentLinkState.Disabled => OrganizationEnrollmentLinkStatus.Disabled,
         DomainEnrollmentLinkState.Rotated => OrganizationEnrollmentLinkStatus.Rotated,
+        DomainEnrollmentLinkState.Expired => OrganizationEnrollmentLinkStatus.Expired,
         _ => OrganizationEnrollmentLinkStatus.Unknown
     };
 
@@ -177,6 +183,7 @@ public static class OrganizationMappings
         DomainEnrollmentClaimState.Pending => OrganizationEnrollmentClaimStatus.Pending,
         DomainEnrollmentClaimState.Accepted => OrganizationEnrollmentClaimStatus.Accepted,
         DomainEnrollmentClaimState.Rejected => OrganizationEnrollmentClaimStatus.Rejected,
+        DomainEnrollmentClaimState.Expired => OrganizationEnrollmentClaimStatus.Expired,
         _ => OrganizationEnrollmentClaimStatus.Unknown
     };
 

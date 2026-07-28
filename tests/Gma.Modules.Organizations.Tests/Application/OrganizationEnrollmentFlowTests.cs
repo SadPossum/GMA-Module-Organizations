@@ -17,7 +17,7 @@ using Xunit;
 using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipRole;
 
 [Trait("Category", "Unit")]
-public sealed class OrganizationEnrollmentFlowTests
+public sealed partial class OrganizationEnrollmentFlowTests
 {
     private static readonly DateTimeOffset Now = new(2026, 7, 14, 12, 0, 0, TimeSpan.Zero);
 
@@ -365,6 +365,7 @@ public sealed class OrganizationEnrollmentFlowTests
                 ["Organizations:SelfServiceCreationEnabled"] = "true",
                 ["Organizations:EnrollmentDefaultLifetimeHours"] = "24",
                 ["Organizations:EnrollmentMaxLifetimeHours"] = "720",
+                ["Organizations:EnrollmentClaimLifetimeHours"] = "168",
                 ["Organizations:EnrollmentMaxClaims"] = "1000"
             })
             .Build();

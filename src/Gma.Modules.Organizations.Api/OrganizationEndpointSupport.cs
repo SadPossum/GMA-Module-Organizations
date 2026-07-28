@@ -40,6 +40,7 @@ internal static class OrganizationEndpointSupport
         new(OrganizationApplicationErrors.EnrollmentLinkExpired.Code, StatusCodes.Status410Gone),
         new(OrganizationApplicationErrors.EnrollmentLinkUnavailable.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.EnrollmentLinkCapacityReached.Code, StatusCodes.Status409Conflict),
+        new(OrganizationApplicationErrors.EnrollmentClaimExpired.Code, StatusCodes.Status410Gone),
         new(OrganizationApplicationErrors.EnrollmentClaimUnavailable.Code, StatusCodes.Status409Conflict));
 
     public static bool TryGetSubject(HttpContext context, out string subjectId)
