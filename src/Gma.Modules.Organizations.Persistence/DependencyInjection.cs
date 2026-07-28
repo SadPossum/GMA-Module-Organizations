@@ -6,6 +6,7 @@ using Gma.Framework.Cqrs.Infrastructure;
 using Gma.Framework.Messaging;
 using Gma.Framework.Persistence.EntityFrameworkCore;
 using Gma.Modules.Organizations.Application.Ports;
+using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Persistence.Access;
 using Gma.Modules.Organizations.Persistence.Repositories;
 using Microsoft.EntityFrameworkCore;
@@ -76,6 +77,9 @@ public static class DependencyInjection
         builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<IInboxStore, OrganizationsInboxStore>());
         builder.Services.TryAddScoped<IOrganizationAccessDecisionReader, OrganizationAccessDecisionReader>();
         builder.Services.TryAddScoped<IOrganizationAccessCandidateFilter, OrganizationAccessDecisionReader>();
+        builder.Services.TryAddScoped<
+            IOrganizationEnrollmentClaimInspector,
+            OrganizationEnrollmentClaimInspector>();
         builder.Services.TryAddScoped<IOrganizationRepository, OrganizationRepository>();
         builder.Services.TryAddScoped<IOrganizationLifecycleRepository, OrganizationLifecycleRepository>();
         builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped(

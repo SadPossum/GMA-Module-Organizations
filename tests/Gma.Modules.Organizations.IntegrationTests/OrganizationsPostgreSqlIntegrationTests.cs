@@ -15,6 +15,10 @@ using Microsoft.Extensions.Logging.Abstractions;
 using Microsoft.Extensions.Options;
 using Testcontainers.PostgreSql;
 using Xunit;
+using ContractEnrollmentClaimDto =
+    Gma.Modules.Organizations.Contracts.OrganizationEnrollmentClaimDto;
+using ContractEnrollmentClaimStatus =
+    Gma.Modules.Organizations.Contracts.OrganizationEnrollmentClaimStatus;
 
 [Trait("Category", "Docker")]
 [Trait("Category", "Integration")]
@@ -130,6 +134,43 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
             ["subject-a"],
             CancellationToken.None));
         Assert.Equal(4, commands.ReaderCommands);
+        Assert.Empty(readerContext.ChangeTracker.Entries());
+    }
+
+    [DockerFact]
+    public async Task Enrollment_claim_inspector_uses_one_exact_untracked_postgresql_query()
+    {
+        await using PostgreSqlContainer postgreSql =
+            CreatePostgreSql("organizations_claim_inspector_tests");
+        await postgreSql.StartAsync();
+        string connectionString = postgreSql.GetConnectionString();
+        (Organization organization, OrganizationEnrollmentLink link) =
+            await SeedEnrollmentAsync(connectionString, maximumClaims: 2);
+        OrganizationEnrollmentClaim claim = CreatePendingClaim(
+            organization.Id,
+            link.Id,
+            "subject-a");
+        await using (OrganizationsDbContext seed = CreateDbContext(connectionString))
+        {
+            seed.EnrollmentClaims.Add(claim);
+            await seed.SaveChangesAsync();
+        }
+
+        CountingCommandInterceptor commands = new();
+        await using OrganizationsDbContext readerContext =
+            CreateDbContext(connectionString, commands);
+        OrganizationEnrollmentClaimInspector inspector = new(readerContext);
+
+        ContractEnrollmentClaimDto? found = await inspector.FindAsync(
+            organization.Id,
+            link.Id,
+            "subject-a");
+
+        Assert.NotNull(found);
+        Assert.Equal(claim.Id, found.ClaimId);
+        Assert.Equal(ContractEnrollmentClaimStatus.Pending, found.Status);
+        Assert.Equal(claim.DecisionExpiresAtUtc, found.DecisionExpiresAtUtc);
+        Assert.Equal(1, commands.ReaderCommands);
         Assert.Empty(readerContext.ChangeTracker.Entries());
     }
 

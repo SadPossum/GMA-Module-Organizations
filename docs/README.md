@@ -8,6 +8,11 @@ Product orchestration may suspend, restore, or remove an exact ordinary membersh
 
 Product orchestration may read exact sources, list sources, and deny invitation/enrollment sources through the Contracts-only `IOrganizationJoinSourceManager`. Reads authorize the owner before source state is loaded, and mutations reuse the owner-authorized CQRS paths. Secret-bearing replacement is deliberately excluded: products revoke or disable the prior source, then use caller-id-based `IOrganizationJoinSourceIssuer` so retries cannot duplicate a replacement source and plaintext tokens are never replayed.
 
+Composed modules that already know an organization, enrollment link, and
+subject may reconcile the retained authoritative claim through the
+Contracts-only `IOrganizationEnrollmentClaimInspector`. It is an exact,
+read-only lookup rather than a claim search or public authorization surface.
+
 The organization id is the immutable technical scope id. A mutable slug is only a routing and display aid. Membership proves belonging but grants no product permission by itself.
 
 Implementation direction and acceptance criteria are tracked in [Organizations Task](organizations-task.md).
@@ -25,6 +30,9 @@ candidate set is tracked in
 The durable natural-expiry lifecycle for invitations, enrollment links, and
 pending join requests is tracked in
 [Organizations Natural Expiry Task](organizations-natural-expiry-task.md).
+
+The exact enrollment-claim reconciliation contract is tracked in
+[Organizations Enrollment Claim Inspection Task](organizations-enrollment-claim-inspection-task.md).
 
 ## Owned behavior
 
