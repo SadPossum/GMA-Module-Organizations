@@ -7,20 +7,6 @@ using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Application.Queries;
 using Gma.Modules.Organizations.Contracts;
 
-internal sealed class ListOrganizationCatalogForAdministrationQueryHandler(
-    IOrganizationRepository organizations)
-    : IQueryHandler<ListOrganizationCatalogForAdministrationQuery, OrganizationCatalogListResponse>
-{
-    public async Task<Result<OrganizationCatalogListResponse>> HandleAsync(
-        ListOrganizationCatalogForAdministrationQuery query,
-        CancellationToken cancellationToken)
-    {
-        PageRequest page = PageRequest.Normalize(query.Page, query.PageSize);
-        return Result.Success(await organizations.ListCatalogAsync(
-            page.Page, page.PageSize, cancellationToken).ConfigureAwait(false));
-    }
-}
-
 internal sealed class ListOrganizationMembersForAdministrationQueryHandler(
     IOrganizationRepository organizations)
     : IQueryHandler<ListOrganizationMembersForAdministrationQuery, OrganizationMemberListResponse>
@@ -38,6 +24,6 @@ internal sealed class ListOrganizationMembersForAdministrationQueryHandler(
 
         PageRequest page = PageRequest.Normalize(query.Page, query.PageSize);
         return Result.Success(await organizations.ListMembersAsync(
-            query.OrganizationId, page.Page, page.PageSize, cancellationToken).ConfigureAwait(false));
+            query.OrganizationId, page, cancellationToken).ConfigureAwait(false));
     }
 }

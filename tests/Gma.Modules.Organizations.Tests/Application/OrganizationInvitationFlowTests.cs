@@ -1,6 +1,7 @@
 namespace Gma.Modules.Organizations.Tests.Application;
 
 using Gma.Framework.Cqrs;
+using Gma.Framework.Pagination;
 using Gma.Framework.Results;
 using Gma.Framework.Runtime.Identity;
 using Gma.Framework.Runtime.Time;
@@ -356,20 +357,23 @@ public sealed class OrganizationInvitationFlowTests
         public Task<bool> SlugExistsAsync(string slug, Guid? excludingOrganizationId, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<bool> MembershipExistsAsync(Guid organizationId, string subjectId, CancellationToken cancellationToken) =>
             Task.FromResult(this.Memberships.Any(item => item.OrganizationId == organizationId && item.SubjectId == subjectId));
-        public Task<OrganizationListResponse> ListForSubjectAsync(string subjectId, int page, int pageSize, CancellationToken cancellationToken) =>
-            Task.FromResult(new OrganizationListResponse([], page, pageSize));
-        public Task<OrganizationCatalogListResponse> ListCatalogAsync(int page, int pageSize, CancellationToken cancellationToken) =>
-            Task.FromResult(new OrganizationCatalogListResponse([], page, pageSize));
-        public Task<OrganizationMemberListResponse> ListMembersAsync(Guid organizationId, int page, int pageSize, CancellationToken cancellationToken) =>
-            Task.FromResult(new OrganizationMemberListResponse([], page, pageSize));
-        public Task<OrganizationInvitationListResponse> ListInvitationsAsync(Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken cancellationToken) =>
-            Task.FromResult(new OrganizationInvitationListResponse([], page, pageSize));
-        public Task<OrganizationEnrollmentLinkListResponse> ListEnrollmentLinksAsync(Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken cancellationToken) =>
-            Task.FromResult(new OrganizationEnrollmentLinkListResponse([], page, pageSize));
+        public Task<OrganizationListResponse> ListForSubjectAsync(string subjectId, PageRequest pageRequest, CancellationToken cancellationToken) =>
+            Task.FromResult(new OrganizationListResponse([], pageRequest.Page, pageRequest.PageSize));
+        public Task<OrganizationCatalogListResponse> ListCatalogAsync(PageRequest pageRequest, CancellationToken cancellationToken) =>
+            Task.FromResult(new OrganizationCatalogListResponse([], pageRequest.Page, pageRequest.PageSize));
+        public Task<OrganizationMemberListResponse> ListMembersAsync(Guid organizationId, PageRequest pageRequest, CancellationToken cancellationToken) =>
+            Task.FromResult(new OrganizationMemberListResponse([], pageRequest.Page, pageRequest.PageSize));
+        public Task<OrganizationInvitationListResponse> ListInvitationsAsync(Guid organizationId, PageRequest pageRequest, DateTimeOffset nowUtc, CancellationToken cancellationToken) =>
+            Task.FromResult(new OrganizationInvitationListResponse([], pageRequest.Page, pageRequest.PageSize));
+        public Task<OrganizationEnrollmentLinkListResponse> ListEnrollmentLinksAsync(Guid organizationId, PageRequest pageRequest, DateTimeOffset nowUtc, CancellationToken cancellationToken) =>
+            Task.FromResult(new OrganizationEnrollmentLinkListResponse([], pageRequest.Page, pageRequest.PageSize));
         public Task<OrganizationJoinRequestListResponse> ListPendingJoinRequestsAsync(
-            Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc,
+            Guid organizationId, PageRequest pageRequest, DateTimeOffset nowUtc,
             CancellationToken cancellationToken) =>
-            Task.FromResult(new OrganizationJoinRequestListResponse([], page, pageSize));
+            Task.FromResult(new OrganizationJoinRequestListResponse(
+                [],
+                pageRequest.Page,
+                pageRequest.PageSize));
         public Task AddOrganizationAsync(Organization value, CancellationToken cancellationToken)
         {
             this.Organizations.Add(value);

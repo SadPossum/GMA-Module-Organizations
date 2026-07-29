@@ -1,6 +1,7 @@
 namespace Gma.Modules.Organizations.IntegrationTests;
 
 using System.Data.Common;
+using Gma.Framework.Pagination;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
@@ -72,7 +73,7 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
         OrganizationRepository repository = new(dbContext);
 
         var discovered = await repository.ListForSubjectAsync(
-            "subject-a", page: 1, pageSize: 25, CancellationToken.None);
+            "subject-a", PageRequest.Normalize(1, 25), CancellationToken.None);
         OrganizationMembership? scoped = await repository.GetMembershipAsync(
             first.Id, "subject-b", CancellationToken.None);
 

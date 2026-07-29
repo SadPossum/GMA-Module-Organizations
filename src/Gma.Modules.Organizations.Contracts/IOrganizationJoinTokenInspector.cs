@@ -10,11 +10,3 @@ public interface IOrganizationJoinTokenInspector
         string token,
         CancellationToken cancellationToken = default);
 }
-
-public sealed record OrganizationJoinTokenInspection<TPreview>(
-    TPreview? Preview,
-    string? ErrorCode)
-    where TPreview : class
-{
-    public bool IsSuccess => this.Preview is not null;
-}

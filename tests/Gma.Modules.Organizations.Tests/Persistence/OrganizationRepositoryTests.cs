@@ -1,5 +1,6 @@
 namespace Gma.Modules.Organizations.Tests.Persistence;
 
+using Gma.Framework.Pagination;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
 using Gma.Modules.Organizations.Persistence;
@@ -27,7 +28,7 @@ public sealed class OrganizationRepositoryTests
         OrganizationRepository repository = new(dbContext);
 
         var result = await repository.ListForSubjectAsync(
-            "subject-a", page: 1, pageSize: 25, CancellationToken.None);
+            "subject-a", PageRequest.Normalize(1, 25), CancellationToken.None);
 
         Assert.Equal(2, result.Items.Count);
         Assert.All(result.Items, item => Assert.Equal("subject-a", item.Membership.SubjectId));
@@ -84,7 +85,7 @@ public sealed class OrganizationRepositoryTests
         OrganizationRepository repository = new(dbContext);
 
         var result = await repository.ListPendingJoinRequestsAsync(
-            organization.Id, 1, 25, Now, CancellationToken.None);
+            organization.Id, PageRequest.Normalize(1, 25), Now, CancellationToken.None);
 
         Assert.Equal(reviewable.Id, Assert.Single(result.Items).ClaimId);
         Assert.Equal(reviewable.DecisionExpiresAtUtc, result.Items[0].DecisionExpiresAtUtc);

@@ -1,5 +1,6 @@
 namespace Gma.Modules.Organizations.Application.Ports;
 
+using Gma.Framework.Pagination;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 
@@ -17,15 +18,30 @@ public interface IOrganizationRepository
     Task<OrganizationEnrollmentClaim?> GetEnrollmentClaimBySubjectAsync(Guid enrollmentLinkId, string subjectId, CancellationToken cancellationToken);
     Task<bool> SlugExistsAsync(string slug, Guid? excludingOrganizationId, CancellationToken cancellationToken);
     Task<bool> MembershipExistsAsync(Guid organizationId, string subjectId, CancellationToken cancellationToken);
-    Task<OrganizationListResponse> ListForSubjectAsync(string subjectId, int page, int pageSize, CancellationToken cancellationToken);
-    Task<OrganizationCatalogListResponse> ListCatalogAsync(int page, int pageSize, CancellationToken cancellationToken);
-    Task<OrganizationMemberListResponse> ListMembersAsync(Guid organizationId, int page, int pageSize, CancellationToken cancellationToken);
-    Task<OrganizationInvitationListResponse> ListInvitationsAsync(Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken cancellationToken);
-    Task<OrganizationEnrollmentLinkListResponse> ListEnrollmentLinksAsync(Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc, CancellationToken cancellationToken);
+    Task<OrganizationListResponse> ListForSubjectAsync(
+        string subjectId,
+        PageRequest pageRequest,
+        CancellationToken cancellationToken);
+    Task<OrganizationCatalogListResponse> ListCatalogAsync(
+        PageRequest pageRequest,
+        CancellationToken cancellationToken);
+    Task<OrganizationMemberListResponse> ListMembersAsync(
+        Guid organizationId,
+        PageRequest pageRequest,
+        CancellationToken cancellationToken);
+    Task<OrganizationInvitationListResponse> ListInvitationsAsync(
+        Guid organizationId,
+        PageRequest pageRequest,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken);
+    Task<OrganizationEnrollmentLinkListResponse> ListEnrollmentLinksAsync(
+        Guid organizationId,
+        PageRequest pageRequest,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken);
     Task<OrganizationJoinRequestListResponse> ListPendingJoinRequestsAsync(
         Guid organizationId,
-        int page,
-        int pageSize,
+        PageRequest pageRequest,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken);
     Task AddOrganizationAsync(Organization organization, CancellationToken cancellationToken);

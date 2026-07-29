@@ -9,12 +9,10 @@ public static class OrganizationsModuleMetadata
 {
     public const string Name = "organizations";
     public const string Schema = "organizations";
-    public const string AdminSurfaceName = "admin";
 
     public static ModuleDescriptor Descriptor { get; } = ModuleDescriptor
         .Create(Name)
         .WithSchema(Schema)
-        .WithAdminSurfaceName(AdminSurfaceName)
         .WithProfile(OrganizationsProfiles.Default)
         .WithPermissions([
             new ModulePermissionDescriptor(OrganizationsAdminPermissionCodes.Read, "Read organizations administration data.", scopeRequirement: PermissionScopeRequirement.Global),

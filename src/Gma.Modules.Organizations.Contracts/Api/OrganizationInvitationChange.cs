@@ -1,5 +1,8 @@
 namespace Gma.Modules.Organizations.Contracts;
 
+using System.Text.Json.Serialization;
+
+[JsonConverter(typeof(OrganizationInvitationChangeJsonConverter))]
 public enum OrganizationInvitationChange
 {
     Unknown = 0,

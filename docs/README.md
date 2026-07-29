@@ -22,6 +22,11 @@ The reusable host policy seam for owner-facing membership changes is tracked in
 [Organizations Membership Change Policy Task](organizations-membership-change-policy-task.md).
 The Contracts facade for product-owned source management is tracked in
 [Organizations Join Source Management Task](organizations-join-source-management-task.md).
+The idempotent Contracts facade for issuing new invitation and enrollment
+sources is tracked in
+[Organizations Join Source Issuance Task](organizations-join-source-issuance-task.md).
+Replacement-source lifecycle consistency is tracked in
+[Organizations Lifecycle Consistency Task](organizations-lifecycle-consistency-task.md).
 
 The bounded application-port filter for offline workflows that already hold a
 candidate set is tracked in

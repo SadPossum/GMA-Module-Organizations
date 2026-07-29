@@ -1,5 +1,6 @@
 namespace Gma.Modules.Organizations.Tests.Support;
 
+using Gma.Framework.Pagination;
 using Gma.Modules.Organizations.Application.Mapping;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
@@ -85,38 +86,50 @@ internal sealed class TestOrganizationRepository(
             item.OrganizationId == organizationId && item.SubjectId == subjectId.Trim()));
 
     public Task<OrganizationListResponse> ListForSubjectAsync(
-        string subjectId, int page, int pageSize, CancellationToken cancellationToken) =>
-        Task.FromResult(new OrganizationListResponse([], page, pageSize));
+        string subjectId, PageRequest pageRequest, CancellationToken cancellationToken) =>
+        Task.FromResult(new OrganizationListResponse([], pageRequest.Page, pageRequest.PageSize));
 
     public Task<OrganizationCatalogListResponse> ListCatalogAsync(
-        int page, int pageSize, CancellationToken cancellationToken) =>
+        PageRequest pageRequest, CancellationToken cancellationToken) =>
         Task.FromResult(new OrganizationCatalogListResponse(
-            this.Organizations.Select(item => item.ToDto()).ToArray(), page, pageSize));
+            this.Organizations.Select(item => item.ToDto()).ToArray(),
+            pageRequest.Page,
+            pageRequest.PageSize));
 
     public Task<OrganizationMemberListResponse> ListMembersAsync(
-        Guid organizationId, int page, int pageSize, CancellationToken cancellationToken) =>
-        Task.FromResult(new OrganizationMemberListResponse([], page, pageSize));
+        Guid organizationId, PageRequest pageRequest, CancellationToken cancellationToken) =>
+        Task.FromResult(new OrganizationMemberListResponse(
+            [],
+            pageRequest.Page,
+            pageRequest.PageSize));
 
     public Task<OrganizationInvitationListResponse> ListInvitationsAsync(
-        Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc,
+        Guid organizationId, PageRequest pageRequest, DateTimeOffset nowUtc,
         CancellationToken cancellationToken) =>
-        Task.FromResult(new OrganizationInvitationListResponse([], page, pageSize));
+        Task.FromResult(new OrganizationInvitationListResponse(
+            [],
+            pageRequest.Page,
+            pageRequest.PageSize));
 
     public Task<OrganizationEnrollmentLinkListResponse> ListEnrollmentLinksAsync(
-        Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc,
+        Guid organizationId, PageRequest pageRequest, DateTimeOffset nowUtc,
         CancellationToken cancellationToken) =>
         Task.FromResult(new OrganizationEnrollmentLinkListResponse(
             this.EnrollmentLinks.Where(item => item.OrganizationId == organizationId)
-                .Select(item => item.ToDto(nowUtc)).ToArray(), page, pageSize));
+                .Select(item => item.ToDto(nowUtc)).ToArray(),
+            pageRequest.Page,
+            pageRequest.PageSize));
 
     public Task<OrganizationJoinRequestListResponse> ListPendingJoinRequestsAsync(
-        Guid organizationId, int page, int pageSize, DateTimeOffset nowUtc,
+        Guid organizationId, PageRequest pageRequest, DateTimeOffset nowUtc,
         CancellationToken cancellationToken) =>
         Task.FromResult(new OrganizationJoinRequestListResponse(
             this.EnrollmentClaims.Where(item => item.OrganizationId == organizationId &&
                                                  item.Status == OrganizationEnrollmentClaimState.Pending &&
                                                  item.DecisionExpiresAtUtc > nowUtc)
-                .Select(OrganizationMappings.ToDto).ToArray(), page, pageSize));
+                .Select(OrganizationMappings.ToDto).ToArray(),
+            pageRequest.Page,
+            pageRequest.PageSize));
 
     public Task AddOrganizationAsync(Organization value, CancellationToken cancellationToken) =>
         Add(this.Organizations, value);
