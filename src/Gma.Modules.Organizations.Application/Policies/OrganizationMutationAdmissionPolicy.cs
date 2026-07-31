@@ -31,8 +31,7 @@ internal sealed partial class OrganizationMutationAdmissionPolicy(
                         logger,
                         policy.GetType().FullName,
                         context.Operation,
-                        context.OrganizationId,
-                        exception);
+                        exception.GetType().Name);
                 }
 
                 return Result.Failure(OrganizationApplicationErrors.MutationAdmissionUnavailable);
@@ -55,11 +54,10 @@ internal sealed partial class OrganizationMutationAdmissionPolicy(
     [LoggerMessage(
         EventId = 4101,
         Level = LogLevel.Warning,
-        Message = "Organization mutation admission policy {PolicyType} failed for operation {Operation} on organization {OrganizationId}.")]
+        Message = "Organization mutation admission policy {PolicyType} failed for operation {Operation} with {ExceptionType}.")]
     private static partial void LogPolicyFailure(
         ILogger logger,
         string? policyType,
         OrganizationMutationAdmissionOperation operation,
-        Guid organizationId,
-        Exception exception);
+        string exceptionType);
 }
