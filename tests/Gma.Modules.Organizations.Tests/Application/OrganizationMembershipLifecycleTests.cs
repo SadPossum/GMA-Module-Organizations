@@ -122,6 +122,97 @@ public sealed class OrganizationMembershipLifecycleTests
         Assert.Equal(2, member.Version);
     }
 
+    [Fact]
+    public async Task Membership_restore_uses_mutation_admission_before_state_change()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        OrganizationMembership member = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Member);
+        Assert.True(member.Remove(
+            member.Version,
+            "owner",
+            Guid.NewGuid(),
+            Now).IsSuccess);
+        RecordingMutationPolicy policy = new(
+            OrganizationMutationAdmissionDecision.Denied);
+        using ServiceProvider services = CreateServices(repository, policy);
+        var handler = services.GetRequiredService<ICommandHandler<
+            EnsureOrganizationMembershipStateCommand,
+            OrganizationMembershipLifecycleResult>>();
+
+        Result<OrganizationMembershipLifecycleResult> result =
+            await handler.HandleAsync(
+                new EnsureOrganizationMembershipStateCommand(
+                    member.OrganizationId,
+                    member.SubjectId,
+                    OrganizationMembershipStatus.Active,
+                    "system:membership-sync"),
+                CancellationToken.None);
+
+        Assert.Equal(
+            OrganizationApplicationErrors.MutationRejected,
+            result.Error);
+        Assert.Equal(DomainMembershipState.Removed, member.Status);
+        Assert.Equal(2, member.Version);
+        OrganizationMutationAdmissionContext context =
+            Assert.Single(policy.Contexts);
+        Assert.Equal(
+            OrganizationMutationAdmissionOperation.RestoreMembership,
+            context.Operation);
+        Assert.Equal(member.Id, context.TargetId);
+        Assert.Equal(member.SubjectId, context.TargetSubjectId);
+    }
+
+    [Fact]
+    public async Task Idempotent_active_replay_and_access_reduction_bypass_mutation_admission()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        OrganizationMembership member = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Member);
+        RecordingMutationPolicy policy = new(
+            OrganizationMutationAdmissionDecision.Denied);
+        using ServiceProvider services = CreateServices(repository, policy);
+        var handler = services.GetRequiredService<ICommandHandler<
+            EnsureOrganizationMembershipStateCommand,
+            OrganizationMembershipLifecycleResult>>();
+
+        Result<OrganizationMembershipLifecycleResult> replay =
+            await handler.HandleAsync(
+                new EnsureOrganizationMembershipStateCommand(
+                    member.OrganizationId,
+                    member.SubjectId,
+                    OrganizationMembershipStatus.Active,
+                    "system:membership-sync"),
+                CancellationToken.None);
+        Result<OrganizationMembershipLifecycleResult> suspended =
+            await handler.HandleAsync(
+                new EnsureOrganizationMembershipStateCommand(
+                    member.OrganizationId,
+                    member.SubjectId,
+                    OrganizationMembershipStatus.Suspended,
+                    "system:membership-sync"),
+                CancellationToken.None);
+        Result<OrganizationMembershipLifecycleResult> removed =
+            await handler.HandleAsync(
+                new EnsureOrganizationMembershipStateCommand(
+                    member.OrganizationId,
+                    member.SubjectId,
+                    OrganizationMembershipStatus.Removed,
+                    "system:membership-sync"),
+                CancellationToken.None);
+
+        Assert.Equal(
+            OrganizationMembershipLifecycleOutcome.AlreadyInDesiredState,
+            replay.Value.Outcome);
+        Assert.Equal(
+            OrganizationMembershipLifecycleOutcome.Changed,
+            suspended.Value.Outcome);
+        Assert.Equal(
+            OrganizationMembershipLifecycleOutcome.Changed,
+            removed.Value.Outcome);
+        Assert.Empty(policy.Contexts);
+    }
+
     private static TestOrganizationRepository CreateRepository()
     {
         Organization organization = Organization.Create(
@@ -136,13 +227,36 @@ public sealed class OrganizationMembershipLifecycleTests
         return repository;
     }
 
-    private static ServiceProvider CreateServices(TestOrganizationRepository repository)
+    private static ServiceProvider CreateServices(
+        TestOrganizationRepository repository,
+        IOrganizationMutationAdmissionPolicy? mutationPolicy = null)
     {
         ServiceCollection services = new();
         services.AddOrganizationsApplication(new ConfigurationBuilder().Build());
+        if (mutationPolicy is not null)
+        {
+            services.AddSingleton(mutationPolicy);
+        }
+
         services.AddSingleton<IOrganizationRepository>(repository);
         services.AddSingleton<ISystemClock>(new TestClock(Now.AddMinutes(1)));
         services.AddSingleton<IIdGenerator>(new TestIds());
         return services.BuildServiceProvider();
+    }
+
+    private sealed class RecordingMutationPolicy(
+        OrganizationMutationAdmissionDecision decision)
+        : IOrganizationMutationAdmissionPolicy
+    {
+        public List<OrganizationMutationAdmissionContext> Contexts { get; } =
+            [];
+
+        public ValueTask<OrganizationMutationAdmissionDecision> EvaluateAsync(
+            OrganizationMutationAdmissionContext context,
+            CancellationToken cancellationToken = default)
+        {
+            this.Contexts.Add(context);
+            return ValueTask.FromResult(decision);
+        }
     }
 }

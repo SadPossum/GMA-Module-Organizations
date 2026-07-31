@@ -17,6 +17,7 @@ public static class OrganizationMutationAdmissionOperationNames
             OrganizationMutationAdmissionOperation.ReissueInvitation => "reissue-invitation",
             OrganizationMutationAdmissionOperation.IssueEnrollmentLink => "issue-enrollment-link",
             OrganizationMutationAdmissionOperation.RotateEnrollmentLink => "rotate-enrollment-link",
+            OrganizationMutationAdmissionOperation.RestoreMembership => "restore-membership",
             _ => throw new ArgumentOutOfRangeException(
                 nameof(operation),
                 operation,
@@ -36,6 +37,7 @@ public static class OrganizationMutationAdmissionOperationNames
             "reissue-invitation" => OrganizationMutationAdmissionOperation.ReissueInvitation,
             "issue-enrollment-link" => OrganizationMutationAdmissionOperation.IssueEnrollmentLink,
             "rotate-enrollment-link" => OrganizationMutationAdmissionOperation.RotateEnrollmentLink,
+            "restore-membership" => OrganizationMutationAdmissionOperation.RestoreMembership,
             _ => OrganizationMutationAdmissionOperation.Unknown
         };
         return operation is not OrganizationMutationAdmissionOperation.Unknown;

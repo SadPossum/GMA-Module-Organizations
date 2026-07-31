@@ -20,10 +20,10 @@ termination, billing, employment, or product workflow state.
    unknown result, unavailable dependency, or policy failure returns a stable
    service-unavailable error.
 5. Cover organization profile, lifecycle, ownership transfer, invitation
-   issuance/reissue, and enrollment-link issuance/rotation.
-6. Keep invitation revocation, enrollment-link disablement, trusted
-   membership lifecycle facades, and administration recovery outside this
-   owner-facing policy.
+   issuance/reissue, enrollment-link issuance/rotation, and non-idempotent
+   trusted membership restoration.
+6. Keep invitation revocation, enrollment-link disablement, membership
+   suspension/removal, and administration recovery outside this policy.
 
 ## Ownership Boundaries
 
@@ -35,14 +35,15 @@ The contract carries only an organization id, operation, actor subject id, and
 optional target identifiers. Product names, tenant lifecycle vocabulary, roles,
 staff records, and authorization profiles must not enter this module.
 
-Exact idempotent issuance replays return the already-issued source without
-evaluating mutation admission because they do not mutate state or replay a
-plaintext token.
+Exact idempotent issuance and active-membership replays return current state
+without evaluating mutation admission because they do not mutate state or
+replay a plaintext token.
 
 ## Acceptance Criteria
 
 - existing hosts without a policy retain current behavior;
-- every state-expanding owner mutation is admitted before its first write;
+- every covered state-expanding owner or trusted lifecycle mutation is
+  admitted before its first write;
 - denied or unavailable decisions leave aggregates and join-source collections
   unchanged;
 - source revocation and disablement remain available for defensive cleanup;
@@ -55,6 +56,6 @@ plaintext token.
 - focused contract, endpoint, policy, organization, invitation, and enrollment
   tests passed;
 - the standalone non-Docker module verification gate passed with a zero-warning
-  build, 150 unit tests, both provider migration-drift checks, and no vulnerable
+  build, 154 unit tests, both provider migration-drift checks, and no vulnerable
   packages;
 - no persistence migration is required because this slice adds no owned state.

@@ -6,6 +6,7 @@ using Gma.Framework.Runtime.Identity;
 using Gma.Framework.Runtime.Time;
 using Gma.Modules.Organizations.Application.Commands;
 using Gma.Modules.Organizations.Application.Mapping;
+using Gma.Modules.Organizations.Application.Policies;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
@@ -14,6 +15,7 @@ using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.Organization
 
 internal sealed class EnsureOrganizationMembershipStateCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationMutationAdmissionPolicy mutationAdmission,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<EnsureOrganizationMembershipStateCommand, OrganizationMembershipLifecycleResult>
 {
@@ -50,6 +52,23 @@ internal sealed class EnsureOrganizationMembershipStateCommandHandler(
             return Result.Success(new OrganizationMembershipLifecycleResult(
                 OrganizationMembershipLifecycleOutcome.AlreadyInDesiredState,
                 membership.ToDto()));
+        }
+
+        if (desiredState == OrganizationMembershipState.Active)
+        {
+            Result admitted = await mutationAdmission.AuthorizeAsync(
+                new OrganizationMutationAdmissionContext(
+                    OrganizationMutationAdmissionOperation.RestoreMembership,
+                    command.OrganizationId,
+                    command.ActorId,
+                    membership.Id,
+                    membership.SubjectId),
+                cancellationToken).ConfigureAwait(false);
+            if (admitted.IsFailure)
+            {
+                return Result.Failure<OrganizationMembershipLifecycleResult>(
+                    admitted.Error);
+            }
         }
 
         Result changed = ChangeState(membership, desiredState.Value, command.ActorId, ids.NewId(), clock.UtcNow);

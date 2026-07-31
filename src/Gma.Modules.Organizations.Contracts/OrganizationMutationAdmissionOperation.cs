@@ -14,5 +14,6 @@ public enum OrganizationMutationAdmissionOperation
     IssueInvitation = 6,
     ReissueInvitation = 7,
     IssueEnrollmentLink = 8,
-    RotateEnrollmentLink = 9
+    RotateEnrollmentLink = 9,
+    RestoreMembership = 10
 }
