@@ -15,6 +15,7 @@ using Microsoft.Extensions.Options;
 
 internal sealed class ReissueOrganizationInvitationCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationMutationAdmissionPolicy mutationAdmission,
     IOrganizationInvitationTokenService tokens,
     IOptions<OrganizationsOptions> options,
     ISystemClock clock,
@@ -51,6 +52,18 @@ internal sealed class ReissueOrganizationInvitationCommandHandler(
         if (lifetime.IsFailure)
         {
             return Result.Failure<OrganizationInvitationIssuedDto>(lifetime.Error);
+        }
+
+        Result admitted = await mutationAdmission.AuthorizeAsync(
+            new OrganizationMutationAdmissionContext(
+                OrganizationMutationAdmissionOperation.ReissueInvitation,
+                command.OrganizationId,
+                command.SubjectId,
+                command.InvitationId),
+            cancellationToken).ConfigureAwait(false);
+        if (admitted.IsFailure)
+        {
+            return Result.Failure<OrganizationInvitationIssuedDto>(admitted.Error);
         }
 
         DateTimeOffset nowUtc = clock.UtcNow;

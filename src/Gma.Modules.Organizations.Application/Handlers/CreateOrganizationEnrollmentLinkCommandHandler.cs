@@ -16,6 +16,7 @@ using DomainApprovalMode = Gma.Modules.Organizations.Domain.Enums.OrganizationEn
 
 internal sealed class CreateOrganizationEnrollmentLinkCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationMutationAdmissionPolicy mutationAdmission,
     IOrganizationEnrollmentTokenService tokens,
     IOptions<OrganizationsOptions> options,
     ISystemClock clock,
@@ -48,6 +49,17 @@ internal sealed class CreateOrganizationEnrollmentLinkCommandHandler(
         {
             return Result.Failure<OrganizationEnrollmentLinkIssuedDto>(
                 lifetime.IsFailure ? lifetime.Error : claims.IsFailure ? claims.Error : mode.Error);
+        }
+
+        Result admitted = await mutationAdmission.AuthorizeAsync(
+            new OrganizationMutationAdmissionContext(
+                OrganizationMutationAdmissionOperation.IssueEnrollmentLink,
+                command.OrganizationId,
+                command.SubjectId),
+            cancellationToken).ConfigureAwait(false);
+        if (admitted.IsFailure)
+        {
+            return Result.Failure<OrganizationEnrollmentLinkIssuedDto>(admitted.Error);
         }
 
         IssuedOrganizationEnrollmentToken issued = tokens.Issue();

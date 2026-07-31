@@ -14,6 +14,7 @@ using Gma.Modules.Organizations.Domain.ValueObjects;
 
 internal sealed class UpdateOrganizationCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationMutationAdmissionPolicy mutationAdmission,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<UpdateOrganizationCommand, OrganizationDto>
 {
@@ -46,6 +47,17 @@ internal sealed class UpdateOrganizationCommandHandler(
             slug.Value.Value, organization.Id, cancellationToken).ConfigureAwait(false))
         {
             return Result.Failure<OrganizationDto>(OrganizationApplicationErrors.SlugConflict);
+        }
+
+        Result admitted = await mutationAdmission.AuthorizeAsync(
+            new OrganizationMutationAdmissionContext(
+                OrganizationMutationAdmissionOperation.UpdateOrganization,
+                command.OrganizationId,
+                command.SubjectId),
+            cancellationToken).ConfigureAwait(false);
+        if (admitted.IsFailure)
+        {
+            return Result.Failure<OrganizationDto>(admitted.Error);
         }
 
         Result changed = organization.UpdateProfile(

@@ -9,6 +9,11 @@ Composed modules may reconcile one known enrollment claim through
 returns retained authoritative claim state without exposing persistence or
 product cleanup policy.
 
+Hosts may register `IOrganizationMutationAdmissionPolicy` implementations to
+admit, deny, or temporarily defer owner-facing organization and join-source
+mutations before Organizations changes state. The seam is optional and contains
+no product lifecycle vocabulary.
+
 This repository is consumed source-first and is mounted by composition repositories as `gma/modules/organizations`. Product names such as workspace, team, or account group remain outside this module.
 
 Useful entry points:

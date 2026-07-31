@@ -13,6 +13,7 @@ using Gma.Modules.Organizations.Domain.Aggregates;
 
 internal sealed class ChangeOrganizationLifecycleCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationMutationAdmissionPolicy mutationAdmission,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<ChangeOrganizationLifecycleCommand, OrganizationDto>
 {
@@ -35,6 +36,33 @@ internal sealed class ChangeOrganizationLifecycleCommandHandler(
             return Result.Failure<OrganizationDto>(OrganizationApplicationErrors.OrganizationNotFound);
         }
 
+        OrganizationMutationAdmissionOperation operation = command.Action switch
+        {
+            OrganizationLifecycleAction.Suspend =>
+                OrganizationMutationAdmissionOperation.SuspendOrganization,
+            OrganizationLifecycleAction.Reactivate =>
+                OrganizationMutationAdmissionOperation.ReactivateOrganization,
+            OrganizationLifecycleAction.Archive =>
+                OrganizationMutationAdmissionOperation.ArchiveOrganization,
+            _ => OrganizationMutationAdmissionOperation.Unknown
+        };
+        if (operation is OrganizationMutationAdmissionOperation.Unknown)
+        {
+            return Result.Failure<OrganizationDto>(
+                OrganizationApplicationErrors.OrganizationLifecycleActionInvalid);
+        }
+
+        Result admitted = await mutationAdmission.AuthorizeAsync(
+            new OrganizationMutationAdmissionContext(
+                operation,
+                command.OrganizationId,
+                command.SubjectId),
+            cancellationToken).ConfigureAwait(false);
+        if (admitted.IsFailure)
+        {
+            return Result.Failure<OrganizationDto>(admitted.Error);
+        }
+
         Guid eventId = ids.NewId();
         DateTimeOffset nowUtc = clock.UtcNow;
         Result changed = command.Action switch
@@ -45,7 +73,7 @@ internal sealed class ChangeOrganizationLifecycleCommandHandler(
                 command.ExpectedVersion, command.ActorId, eventId, nowUtc),
             OrganizationLifecycleAction.Archive => organization.Archive(
                 command.ExpectedVersion, command.ActorId, eventId, nowUtc),
-            _ => Result.Failure(OrganizationApplicationErrors.OrganizationNotFound)
+            _ => Result.Failure(OrganizationApplicationErrors.OrganizationLifecycleActionInvalid)
         };
 
         return changed.IsSuccess

@@ -16,6 +16,7 @@ using Microsoft.Extensions.Options;
 
 internal sealed class IssueOrganizationInvitationCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationMutationAdmissionPolicy mutationAdmission,
     IOrganizationInvitationTokenService tokens,
     IOptions<OrganizationsOptions> options,
     ISystemClock clock,
@@ -94,6 +95,18 @@ internal sealed class IssueOrganizationInvitationCommandHandler(
             .ConfigureAwait(false))
         {
             return Failure(OrganizationApplicationErrors.JoinSourceIssuanceConflict);
+        }
+
+        Result admitted = await mutationAdmission.AuthorizeAsync(
+            new OrganizationMutationAdmissionContext(
+                OrganizationMutationAdmissionOperation.IssueInvitation,
+                request.OrganizationId,
+                subject.Value.Value,
+                request.SourceId),
+            cancellationToken).ConfigureAwait(false);
+        if (admitted.IsFailure)
+        {
+            return Failure(admitted.Error);
         }
 
         IssuedOrganizationInvitationToken issued = tokens.Issue();

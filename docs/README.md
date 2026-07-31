@@ -15,11 +15,20 @@ read-only lookup rather than a claim search or public authorization surface.
 
 The organization id is the immutable technical scope id. A mutable slug is only a routing and display aid. Membership proves belonging but grants no product permission by itself.
 
+Composed products may register one or more
+`IOrganizationMutationAdmissionPolicy` implementations to guard owner-facing
+organization profile, lifecycle, ownership, invitation, and enrollment-source
+mutations. Policies compose fail-closed, remain optional for existing hosts,
+and do not intercept defensive source denial or administration recovery.
+
 Implementation direction and acceptance criteria are tracked in [Organizations Task](organizations-task.md).
 The remaining production hardening work is tracked in
 [Organizations Production Hardening Task](organizations-production-hardening-task.md).
 The reusable host policy seam for owner-facing membership changes is tracked in
 [Organizations Membership Change Policy Task](organizations-membership-change-policy-task.md).
+The reusable admission seam for organization and join-source mutations is
+tracked in
+[Organizations Mutation Admission Policy Task](organizations-mutation-admission-policy-task.md).
 The Contracts facade for product-owned source management is tracked in
 [Organizations Join Source Management Task](organizations-join-source-management-task.md).
 The idempotent Contracts facade for issuing new invitation and enrollment

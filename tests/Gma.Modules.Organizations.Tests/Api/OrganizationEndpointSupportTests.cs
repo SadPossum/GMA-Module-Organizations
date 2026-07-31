@@ -52,6 +52,22 @@ public sealed class OrganizationEndpointSupportTests
     }
 
     [Theory]
+    [InlineData("Organizations.MutationRejected", StatusCodes.Status409Conflict)]
+    [InlineData("Organizations.MutationAdmissionUnavailable", StatusCodes.Status503ServiceUnavailable)]
+    public void Mutation_admission_failures_have_stable_http_statuses(
+        string errorCode,
+        int expectedStatusCode)
+    {
+        Error error = errorCode == OrganizationApplicationErrors.MutationRejected.Code
+            ? OrganizationApplicationErrors.MutationRejected
+            : OrganizationApplicationErrors.MutationAdmissionUnavailable;
+
+        int statusCode = OrganizationEndpointSupport.ErrorStatusCodes.GetStatusCode(error);
+
+        Assert.Equal(expectedStatusCode, statusCode);
+    }
+
+    [Theory]
     [InlineData(ApplicationClaimNames.Subject)]
     [InlineData(ClaimTypes.NameIdentifier)]
     public void Subject_can_be_resolved_from_raw_or_mapped_jwt_claim(string claimType)

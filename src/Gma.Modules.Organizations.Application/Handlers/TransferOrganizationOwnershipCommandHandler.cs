@@ -15,6 +15,7 @@ using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.Organization
 
 internal sealed class TransferOrganizationOwnershipCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationMutationAdmissionPolicy mutationAdmission,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<TransferOrganizationOwnershipCommand, OrganizationMembershipDto>
 {
@@ -49,6 +50,18 @@ internal sealed class TransferOrganizationOwnershipCommandHandler(
         if (target is not { Status: OrganizationMembershipState.Active })
         {
             return Result.Failure<OrganizationMembershipDto>(OrganizationApplicationErrors.MembershipRequired);
+        }
+
+        Result admitted = await mutationAdmission.AuthorizeAsync(
+            new OrganizationMutationAdmissionContext(
+                OrganizationMutationAdmissionOperation.TransferOwnership,
+                command.OrganizationId,
+                command.SubjectId,
+                TargetSubjectId: command.TargetSubjectId),
+            cancellationToken).ConfigureAwait(false);
+        if (admitted.IsFailure)
+        {
+            return Result.Failure<OrganizationMembershipDto>(admitted.Error);
         }
 
         DateTimeOffset nowUtc = clock.UtcNow;

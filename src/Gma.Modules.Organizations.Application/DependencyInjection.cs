@@ -1,4 +1,4 @@
-﻿namespace Gma.Modules.Organizations.Application;
+namespace Gma.Modules.Organizations.Application;
 
 using Gma.Framework.Application.Composition;
 using Gma.Modules.Organizations.Application.Policies;
@@ -32,6 +32,7 @@ public static class DependencyInjection
         services.TryAddScoped<IOrganizationAdmissionPolicy, DefaultOrganizationAdmissionPolicy>();
         services.TryAddScoped<IOrganizationInvitationAdmissionPolicy, DefaultOrganizationInvitationAdmissionPolicy>();
         services.TryAddScoped<OrganizationJoinAdmissionPolicy>();
+        services.TryAddScoped<OrganizationMutationAdmissionPolicy>();
         services.TryAddScoped<IOrganizationJoinTokenInspector, OrganizationJoinTokenInspector>();
         services.TryAddScoped<IOrganizationMembershipLifecycle, OrganizationMembershipLifecycle>();
         services.TryAddScoped<IOrganizationJoinSourceIssuer, OrganizationJoinSourceIssuer>();

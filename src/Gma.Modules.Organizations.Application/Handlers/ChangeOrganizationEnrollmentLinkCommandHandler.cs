@@ -15,6 +15,7 @@ using Microsoft.Extensions.Options;
 
 internal sealed class ChangeOrganizationEnrollmentLinkCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationMutationAdmissionPolicy mutationAdmission,
     IOrganizationEnrollmentTokenService tokens,
     IOptions<OrganizationsOptions> options,
     ISystemClock clock,
@@ -66,6 +67,18 @@ internal sealed class ChangeOrganizationEnrollmentLinkCommandHandler(
         if (lifetime.IsFailure)
         {
             return Result.Failure<OrganizationEnrollmentLinkMutationDto>(lifetime.Error);
+        }
+
+        Result admitted = await mutationAdmission.AuthorizeAsync(
+            new OrganizationMutationAdmissionContext(
+                OrganizationMutationAdmissionOperation.RotateEnrollmentLink,
+                command.OrganizationId,
+                command.SubjectId,
+                command.EnrollmentLinkId),
+            cancellationToken).ConfigureAwait(false);
+        if (admitted.IsFailure)
+        {
+            return Result.Failure<OrganizationEnrollmentLinkMutationDto>(admitted.Error);
         }
 
         Result rotated = link.Rotate(command.ExpectedVersion, command.ActorId, ids.NewId(), nowUtc);
