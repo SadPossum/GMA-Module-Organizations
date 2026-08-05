@@ -39,4 +39,7 @@ public static class OrganizationDomainErrors
     public static readonly Error EnrollmentClaimExpiryInvalid = new("Organizations.EnrollmentClaimExpiryInvalid", "The enrollment claim expiry is invalid.");
     public static readonly Error EnrollmentClaimExpired = new("Organizations.EnrollmentClaimExpired", "The enrollment claim has expired.");
     public static readonly Error EnrollmentClaimUnavailable = new("Organizations.EnrollmentClaimUnavailable", "The enrollment claim is unavailable.");
+    public static readonly Error ScopeStateInvalid = new("Organizations.ScopeStateInvalid", "The organization scope state is invalid.");
+    public static readonly Error ScopeDestroyOperationInvalid = new("Organizations.ScopeDestroyOperationInvalid", "The organization scope destruction operation is invalid.");
+    public static readonly Error ScopeDestroyReceiptInvalid = new("Organizations.ScopeDestroyReceiptInvalid", "The organization scope destruction receipt is invalid.");
 }

@@ -1,10 +1,12 @@
 namespace Gma.Modules.Organizations.Persistence;
 
+using System.Data;
 using Gma.Framework.Runtime.Maintenance;
 using Gma.Framework.Runtime.Time;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
 using Microsoft.EntityFrameworkCore;
+using Microsoft.EntityFrameworkCore.Storage;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
 using Microsoft.Extensions.Logging;
@@ -102,24 +104,28 @@ internal sealed class OrganizationsRetentionService(
         int batchSize,
         CancellationToken cancellationToken)
     {
-        Guid[] invitationIds = await dbContext.Invitations
+        IQueryable<RetentionCandidate> candidates = dbContext.Invitations
             .AsNoTracking()
             .Where(invitation =>
                 invitation.Status != OrganizationInvitationState.Pending &&
-                invitation.LastChangedAtUtc <= cutoffUtc)
+                invitation.LastChangedAtUtc <= cutoffUtc &&
+                !dbContext.OrganizationScopeStates.Any(state =>
+                    state.OrganizationId == invitation.OrganizationId &&
+                    state.IsClosed))
             .OrderBy(invitation => invitation.LastChangedAtUtc)
             .ThenBy(invitation => invitation.Id)
-            .Select(invitation => invitation.Id)
-            .Take(batchSize)
-            .ToArrayAsync(cancellationToken)
+            .Select(invitation => new RetentionCandidate(
+                invitation.Id,
+                invitation.OrganizationId));
+        return await DeleteRevisionFencedBatchAsync(
+                dbContext,
+                candidates,
+                batchSize,
+                (ids, token) => dbContext.Invitations
+                    .Where(invitation => ids.Contains(invitation.Id))
+                    .ExecuteDeleteAsync(token),
+                cancellationToken)
             .ConfigureAwait(false);
-
-        return invitationIds.Length == 0
-            ? 0
-            : await dbContext.Invitations
-                .Where(invitation => invitationIds.Contains(invitation.Id))
-                .ExecuteDeleteAsync(cancellationToken)
-                .ConfigureAwait(false);
     }
 
     private static async Task<int> DeleteResolvedEnrollmentClaimsBatchAsync(
@@ -128,25 +134,27 @@ internal sealed class OrganizationsRetentionService(
         int batchSize,
         CancellationToken cancellationToken)
     {
-        Guid[] claimIds = await (
+        IQueryable<RetentionCandidate> candidates =
             from claim in dbContext.EnrollmentClaims.AsNoTracking()
             join link in dbContext.EnrollmentLinks.AsNoTracking()
                 on claim.EnrollmentLinkId equals link.Id
             where claim.Status != OrganizationEnrollmentClaimState.Pending &&
                   link.Status != OrganizationEnrollmentLinkState.Active &&
-                  link.LastChangedAtUtc <= cutoffUtc
+                  link.LastChangedAtUtc <= cutoffUtc &&
+                  !dbContext.OrganizationScopeStates.Any(state =>
+                      state.OrganizationId == claim.OrganizationId &&
+                      state.IsClosed)
             orderby claim.LastChangedAtUtc, claim.Id
-            select claim.Id)
-            .Take(batchSize)
-            .ToArrayAsync(cancellationToken)
+            select new RetentionCandidate(claim.Id, claim.OrganizationId);
+        return await DeleteRevisionFencedBatchAsync(
+                dbContext,
+                candidates,
+                batchSize,
+                (ids, token) => dbContext.EnrollmentClaims
+                    .Where(claim => ids.Contains(claim.Id))
+                    .ExecuteDeleteAsync(token),
+                cancellationToken)
             .ConfigureAwait(false);
-
-        return claimIds.Length == 0
-            ? 0
-            : await dbContext.EnrollmentClaims
-                .Where(claim => claimIds.Contains(claim.Id))
-                .ExecuteDeleteAsync(cancellationToken)
-                .ConfigureAwait(false);
     }
 
     private static async Task<int> DeleteEnrollmentLinksBatchAsync(
@@ -155,24 +163,92 @@ internal sealed class OrganizationsRetentionService(
         int batchSize,
         CancellationToken cancellationToken)
     {
-        Guid[] linkIds = await dbContext.EnrollmentLinks
+        IQueryable<RetentionCandidate> candidates = dbContext.EnrollmentLinks
             .AsNoTracking()
             .Where(link =>
                 link.Status != OrganizationEnrollmentLinkState.Active &&
                 link.LastChangedAtUtc <= cutoffUtc &&
-                !dbContext.EnrollmentClaims.Any(claim => claim.EnrollmentLinkId == link.Id))
+                !dbContext.EnrollmentClaims.Any(claim =>
+                    claim.EnrollmentLinkId == link.Id) &&
+                !dbContext.OrganizationScopeStates.Any(state =>
+                    state.OrganizationId == link.OrganizationId &&
+                    state.IsClosed))
             .OrderBy(link => link.LastChangedAtUtc)
             .ThenBy(link => link.Id)
-            .Select(link => link.Id)
+            .Select(link => new RetentionCandidate(
+                link.Id,
+                link.OrganizationId));
+        return await DeleteRevisionFencedBatchAsync(
+                dbContext,
+                candidates,
+                batchSize,
+                (ids, token) => dbContext.EnrollmentLinks
+                    .Where(link => ids.Contains(link.Id))
+                    .ExecuteDeleteAsync(token),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<int> DeleteRevisionFencedBatchAsync(
+        OrganizationsDbContext dbContext,
+        IQueryable<RetentionCandidate> candidates,
+        int batchSize,
+        Func<Guid[], CancellationToken, Task<int>> delete,
+        CancellationToken cancellationToken)
+    {
+        await using IDbContextTransaction? transaction =
+            dbContext.Database.IsRelational() &&
+            dbContext.Database.CurrentTransaction is null
+                ? await dbContext.Database.BeginTransactionAsync(
+                        IsolationLevel.Serializable,
+                        cancellationToken)
+                    .ConfigureAwait(false)
+                : null;
+        RetentionCandidate[] selected = await candidates
             .Take(batchSize)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
+        if (selected.Length == 0)
+        {
+            if (transaction is not null)
+            {
+                await transaction.CommitAsync(cancellationToken)
+                    .ConfigureAwait(false);
+            }
 
-        return linkIds.Length == 0
-            ? 0
-            : await dbContext.EnrollmentLinks
-                .Where(link => linkIds.Contains(link.Id))
-                .ExecuteDeleteAsync(cancellationToken)
+            return 0;
+        }
+
+        Guid[] organizationIds = selected
+            .Select(candidate => candidate.OrganizationId)
+            .Distinct()
+            .ToArray();
+        if (!await dbContext.TryRegisterMaintenanceScopeMutationsAsync(
+                organizationIds,
+                cancellationToken).ConfigureAwait(false))
+        {
+            throw new OrganizationScopeClosedException();
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken)
+            .ConfigureAwait(false);
+        Guid[] ids = selected.Select(candidate => candidate.Id).ToArray();
+        int removed = await delete(ids, cancellationToken)
+            .ConfigureAwait(false);
+        if (removed != selected.Length)
+        {
+            throw new InvalidDataException(
+                "Organization retention changed during its revision fence.");
+        }
+
+        if (transaction is not null)
+        {
+            await transaction.CommitAsync(cancellationToken)
                 .ConfigureAwait(false);
+        }
+
+        return removed;
     }
+
+    private sealed record RetentionCandidate(Guid Id, Guid OrganizationId);
 }

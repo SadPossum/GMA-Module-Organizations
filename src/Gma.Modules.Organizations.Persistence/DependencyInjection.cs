@@ -82,6 +82,9 @@ public static class DependencyInjection
             OrganizationEnrollmentClaimInspector>();
         builder.Services.TryAddScoped<IOrganizationRepository, OrganizationRepository>();
         builder.Services.TryAddScoped<IOrganizationLifecycleRepository, OrganizationLifecycleRepository>();
+        builder.Services.TryAddScoped<
+            IOrganizationScopeLifecycle,
+            OrganizationScopeLifecycleService>();
         builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped(
             typeof(ICommandPipelineBehavior<,>),
             typeof(OrganizationsPersistenceRetryBehavior<,>)));

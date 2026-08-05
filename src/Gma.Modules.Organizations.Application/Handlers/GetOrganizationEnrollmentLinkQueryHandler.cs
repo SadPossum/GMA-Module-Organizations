@@ -12,17 +12,23 @@ using Gma.Modules.Organizations.Domain.Aggregates;
 
 internal sealed class GetOrganizationEnrollmentLinkQueryHandler(
     IOrganizationRepository organizations,
+    OrganizationJoinSourceAuthorization joinSourceAuthorization,
     ISystemClock clock) : IQueryHandler<GetOrganizationEnrollmentLinkQuery, OrganizationEnrollmentLinkDto>
 {
     public async Task<Result<OrganizationEnrollmentLinkDto>> HandleAsync(
         GetOrganizationEnrollmentLinkQuery query,
         CancellationToken cancellationToken)
     {
-        Result<OrganizationMembership> owner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
-            organizations, query.OrganizationId, query.SubjectId, cancellationToken).ConfigureAwait(false);
-        if (owner.IsFailure)
+        Result authorized = await joinSourceAuthorization.AuthorizeAsync(
+            new OrganizationJoinSourceAuthorizationContext(
+                OrganizationJoinSourceAuthorizationOperation.ReadEnrollmentLinks,
+                query.OrganizationId,
+                query.SubjectId,
+                query.EnrollmentLinkId),
+            cancellationToken).ConfigureAwait(false);
+        if (authorized.IsFailure)
         {
-            return Result.Failure<OrganizationEnrollmentLinkDto>(owner.Error);
+            return Result.Failure<OrganizationEnrollmentLinkDto>(authorized.Error);
         }
 
         OrganizationEnrollmentLink? link = await organizations.GetEnrollmentLinkAsync(

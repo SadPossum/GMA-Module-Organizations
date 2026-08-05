@@ -12,17 +12,23 @@ using Gma.Modules.Organizations.Domain.Aggregates;
 
 internal sealed class GetOrganizationInvitationQueryHandler(
     IOrganizationRepository organizations,
+    OrganizationJoinSourceAuthorization joinSourceAuthorization,
     ISystemClock clock) : IQueryHandler<GetOrganizationInvitationQuery, OrganizationInvitationDto>
 {
     public async Task<Result<OrganizationInvitationDto>> HandleAsync(
         GetOrganizationInvitationQuery query,
         CancellationToken cancellationToken)
     {
-        Result<OrganizationMembership> owner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
-            organizations, query.OrganizationId, query.SubjectId, cancellationToken).ConfigureAwait(false);
-        if (owner.IsFailure)
+        Result authorized = await joinSourceAuthorization.AuthorizeAsync(
+            new OrganizationJoinSourceAuthorizationContext(
+                OrganizationJoinSourceAuthorizationOperation.ReadInvitations,
+                query.OrganizationId,
+                query.SubjectId,
+                query.InvitationId),
+            cancellationToken).ConfigureAwait(false);
+        if (authorized.IsFailure)
         {
-            return Result.Failure<OrganizationInvitationDto>(owner.Error);
+            return Result.Failure<OrganizationInvitationDto>(authorized.Error);
         }
 
         OrganizationInvitation? invitation = await organizations.GetInvitationAsync(

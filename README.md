@@ -21,6 +21,7 @@ Useful entry points:
 - `Gma.Modules.Organizations.slnx`
 - `docs/README.md`
 - `docs/organizations-task.md`
+- `docs/organizations-scope-lifecycle-task.md`
 - `eng/verify.ps1`
 
 Hosts may configure `OrganizationsApiSecurityOptions.GovernanceOperationsAssurance`

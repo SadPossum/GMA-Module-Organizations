@@ -456,6 +456,175 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
                     b.ToTable("organization_memberships", "organizations");
                 });
 
+            modelBuilder.Entity("Gma.Modules.Organizations.Domain.Entities.OrganizationScopeDestroyOperation", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BatchSize")
+                        .HasColumnType("integer");
+
+                    b.Property<int>("CompletedBatchCount")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("ExpectedRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("ProofVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<string>("RemovalProofSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<long>("RemovedRecordCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("RequestSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<long>("ResultingRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<int>("Stage")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<DateTimeOffset>("UpdatedAtUtc")
+                        .IsConcurrencyToken()
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("OrganizationId");
+
+                    b.HasIndex("OperationId")
+                        .IsUnique();
+
+                    b.ToTable("organization_scope_destroy_operations", "organizations", t =>
+                        {
+                            t.HasCheckConstraint("CK_organization_scope_destroy_operations_batch", "\"BatchSize\" >= 1 AND \"BatchSize\" <= 1000");
+
+                            t.HasCheckConstraint("CK_organization_scope_destroy_operations_progress", "\"Stage\" >= 1 AND \"Stage\" <= 7 AND \"RemovedRecordCount\" >= 0 AND \"CompletedBatchCount\" >= 0 AND \"ProofVersion\" >= 1 AND \"UpdatedAtUtc\" >= \"StartedAtUtc\"");
+
+                            t.HasCheckConstraint("CK_organization_scope_destroy_operations_revisions", "\"ExpectedRevision\" >= 0 AND \"ResultingRevision\" > \"ExpectedRevision\"");
+                        });
+                });
+
+            modelBuilder.Entity("Gma.Modules.Organizations.Domain.Entities.OrganizationScopeDestroyReceipt", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<int>("BatchSize")
+                        .HasColumnType("integer");
+
+                    b.Property<DateTimeOffset>("CompletedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<int>("CompletedBatchCount")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("ExpectedRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<Guid>("OperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("RemovalProofSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<int>("RemovalProofVersion")
+                        .HasColumnType("integer");
+
+                    b.Property<long>("RemovedRecordCount")
+                        .HasColumnType("bigint");
+
+                    b.Property<string>("RequestSha256")
+                        .IsRequired()
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<long>("ResultingRevision")
+                        .HasColumnType("bigint");
+
+                    b.Property<DateTimeOffset>("StartedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.HasKey("OrganizationId");
+
+                    b.HasIndex("OperationId")
+                        .IsUnique();
+
+                    b.ToTable("organization_scope_destroy_receipts", "organizations", t =>
+                        {
+                            t.HasTrigger("organization_scope_destroy_receipts_append_only");
+
+                            t.HasCheckConstraint("CK_organization_scope_destroy_receipts_progress", "\"BatchSize\" >= 1 AND \"BatchSize\" <= 1000 AND \"RemovedRecordCount\" >= 0 AND \"CompletedBatchCount\" >= 0 AND \"RemovalProofVersion\" >= 1 AND \"CompletedAtUtc\" >= \"StartedAtUtc\"");
+
+                            t.HasCheckConstraint("CK_organization_scope_destroy_receipts_revisions", "\"ExpectedRevision\" >= 0 AND \"ResultingRevision\" > \"ExpectedRevision\"");
+                        });
+                });
+
+            modelBuilder.Entity("Gma.Modules.Organizations.Domain.Entities.OrganizationScopeState", b =>
+                {
+                    b.Property<Guid>("OrganizationId")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("uuid");
+
+                    b.Property<Guid?>("CloseOperationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<string>("CloseRequestSha256")
+                        .HasMaxLength(64)
+                        .HasColumnType("character(64)")
+                        .IsFixedLength();
+
+                    b.Property<DateTimeOffset?>("ClosedAtUtc")
+                        .HasColumnType("timestamp with time zone");
+
+                    b.Property<bool>("IsClosed")
+                        .HasColumnType("boolean");
+
+                    b.Property<string>("ScopeId")
+                        .IsRequired()
+                        .HasMaxLength(36)
+                        .HasColumnType("character(36)")
+                        .IsFixedLength();
+
+                    b.Property<long>("Version")
+                        .IsConcurrencyToken()
+                        .HasColumnType("bigint");
+
+                    b.HasKey("OrganizationId");
+
+                    b.HasIndex("ScopeId")
+                        .IsUnique();
+
+                    b.HasIndex("IsClosed", "ClosedAtUtc", "OrganizationId");
+
+                    b.ToTable("organization_scope_states", "organizations", t =>
+                        {
+                            t.HasTrigger("organization_scope_states_closed_immutable");
+
+                            t.HasCheckConstraint("CK_organization_scope_states_closure", "(CAST(\"IsClosed\" AS integer) = 0 AND \"CloseOperationId\" IS NULL AND \"CloseRequestSha256\" IS NULL AND \"ClosedAtUtc\" IS NULL) OR (CAST(\"IsClosed\" AS integer) = 1 AND \"CloseOperationId\" IS NOT NULL AND \"CloseRequestSha256\" IS NOT NULL AND \"ClosedAtUtc\" IS NOT NULL)");
+
+                            t.HasCheckConstraint("CK_organization_scope_states_version", "\"Version\" >= 0");
+                        });
+                });
+
             modelBuilder.Entity("Gma.Modules.Organizations.Domain.Aggregates.OrganizationEnrollmentClaim", b =>
                 {
                     b.HasOne("Gma.Modules.Organizations.Domain.Aggregates.OrganizationEnrollmentLink", null)
@@ -497,6 +666,24 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
             modelBuilder.Entity("Gma.Modules.Organizations.Domain.Aggregates.OrganizationMembership", b =>
                 {
                     b.HasOne("Gma.Modules.Organizations.Domain.Aggregates.Organization", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Gma.Modules.Organizations.Domain.Entities.OrganizationScopeDestroyOperation", b =>
+                {
+                    b.HasOne("Gma.Modules.Organizations.Domain.Entities.OrganizationScopeState", null)
+                        .WithMany()
+                        .HasForeignKey("OrganizationId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+                });
+
+            modelBuilder.Entity("Gma.Modules.Organizations.Domain.Entities.OrganizationScopeDestroyReceipt", b =>
+                {
+                    b.HasOne("Gma.Modules.Organizations.Domain.Entities.OrganizationScopeState", null)
                         .WithMany()
                         .HasForeignKey("OrganizationId")
                         .OnDelete(DeleteBehavior.Restrict)

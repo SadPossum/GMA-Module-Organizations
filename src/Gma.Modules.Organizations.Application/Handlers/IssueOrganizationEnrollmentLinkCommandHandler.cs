@@ -17,6 +17,7 @@ using DomainApprovalMode = Gma.Modules.Organizations.Domain.Enums.OrganizationEn
 
 internal sealed class IssueOrganizationEnrollmentLinkCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationJoinSourceAuthorization joinSourceAuthorization,
     OrganizationMutationAdmissionPolicy mutationAdmission,
     IOrganizationEnrollmentTokenService tokens,
     IOptions<OrganizationsOptions> options,
@@ -51,14 +52,16 @@ internal sealed class IssueOrganizationEnrollmentLinkCommandHandler(
                 lifetime.IsFailure ? lifetime.Error : claims.IsFailure ? claims.Error : mode.Error);
         }
 
-        Result<OrganizationMembership> owner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
-            organizations,
-            request.OrganizationId,
-            subject.Value.Value,
+        Result authorized = await joinSourceAuthorization.AuthorizeAsync(
+            new OrganizationJoinSourceAuthorizationContext(
+                OrganizationJoinSourceAuthorizationOperation.IssueEnrollmentLink,
+                request.OrganizationId,
+                subject.Value.Value,
+                request.SourceId),
             cancellationToken).ConfigureAwait(false);
-        if (owner.IsFailure)
+        if (authorized.IsFailure)
         {
-            return Failure(owner.Error);
+            return Failure(authorized.Error);
         }
 
         Organization? organization = await organizations

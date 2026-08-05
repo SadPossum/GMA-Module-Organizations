@@ -33,6 +33,7 @@ public static class DependencyInjection
         services.TryAddScoped<IOrganizationInvitationAdmissionPolicy, DefaultOrganizationInvitationAdmissionPolicy>();
         services.TryAddScoped<OrganizationJoinAdmissionPolicy>();
         services.TryAddScoped<OrganizationMutationAdmissionPolicy>();
+        services.TryAddScoped<OrganizationJoinSourceAuthorization>();
         services.TryAddScoped<IOrganizationJoinTokenInspector, OrganizationJoinTokenInspector>();
         services.TryAddScoped<IOrganizationMembershipLifecycle, OrganizationMembershipLifecycle>();
         services.TryAddScoped<IOrganizationJoinSourceIssuer, OrganizationJoinSourceIssuer>();

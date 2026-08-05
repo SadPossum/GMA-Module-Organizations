@@ -15,6 +15,7 @@ using Microsoft.Extensions.Options;
 
 internal sealed class ChangeOrganizationEnrollmentLinkCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationJoinSourceAuthorization joinSourceAuthorization,
     OrganizationMutationAdmissionPolicy mutationAdmission,
     IOrganizationEnrollmentTokenService tokens,
     IOptions<OrganizationsOptions> options,
@@ -25,11 +26,33 @@ internal sealed class ChangeOrganizationEnrollmentLinkCommandHandler(
         ChangeOrganizationEnrollmentLinkCommand command,
         CancellationToken cancellationToken)
     {
-        Result<OrganizationMembership> owner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
-            organizations, command.OrganizationId, command.SubjectId, cancellationToken).ConfigureAwait(false);
-        if (owner.IsFailure)
+        OrganizationJoinSourceAuthorizationOperation authorizationOperation =
+            command.Action switch
+            {
+                OrganizationEnrollmentLinkAction.Disable =>
+                    OrganizationJoinSourceAuthorizationOperation.DisableEnrollmentLink,
+                OrganizationEnrollmentLinkAction.Rotate =>
+                    OrganizationJoinSourceAuthorizationOperation.RotateEnrollmentLink,
+                _ => OrganizationJoinSourceAuthorizationOperation.Unknown
+            };
+        if (authorizationOperation ==
+            OrganizationJoinSourceAuthorizationOperation.Unknown)
         {
-            return Result.Failure<OrganizationEnrollmentLinkMutationDto>(owner.Error);
+            return Result.Failure<OrganizationEnrollmentLinkMutationDto>(
+                OrganizationApplicationErrors.EnrollmentLinkNotFound);
+        }
+
+        Result authorized = await joinSourceAuthorization.AuthorizeAsync(
+            new OrganizationJoinSourceAuthorizationContext(
+                authorizationOperation,
+                command.OrganizationId,
+                command.SubjectId,
+                command.EnrollmentLinkId),
+            cancellationToken).ConfigureAwait(false);
+        if (authorized.IsFailure)
+        {
+            return Result.Failure<OrganizationEnrollmentLinkMutationDto>(
+                authorized.Error);
         }
 
         OrganizationEnrollmentLink? link = await organizations.GetEnrollmentLinkAsync(
@@ -46,11 +69,6 @@ internal sealed class ChangeOrganizationEnrollmentLinkCommandHandler(
             return disabled.IsSuccess
                 ? Result.Success(new OrganizationEnrollmentLinkMutationDto(link.ToDto(nowUtc), null))
                 : Result.Failure<OrganizationEnrollmentLinkMutationDto>(disabled.Error);
-        }
-
-        if (command.Action != OrganizationEnrollmentLinkAction.Rotate)
-        {
-            return Result.Failure<OrganizationEnrollmentLinkMutationDto>(OrganizationApplicationErrors.EnrollmentLinkNotFound);
         }
 
         Organization? organization = await organizations.GetOrganizationAsync(

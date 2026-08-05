@@ -31,6 +31,8 @@ public static class OrganizationApplicationErrors
     public static readonly Error MutationAdmissionUnavailable = new("Organizations.MutationAdmissionUnavailable", "Organization mutation admission is temporarily unavailable.");
     public static readonly Error JoinSourceIdRequired = new("Organizations.JoinSourceIdRequired", "A join-source id is required.");
     public static readonly Error JoinSourceIssuanceConflict = new("Organizations.JoinSourceIssuanceConflict", "The join-source id is already bound to different issuance inputs.");
+    public static readonly Error JoinSourceManagementRequired = new("Organizations.JoinSourceManagementRequired", "An active organization owner or authorized join-source manager is required.");
+    public static readonly Error JoinSourceAuthorizationUnavailable = new("Organizations.JoinSourceAuthorizationUnavailable", "Join-source authorization is temporarily unavailable.");
     public static Error VersionConflict => OrganizationDomainErrors.VersionConflict;
     public static Error LastActiveOwner => OrganizationDomainErrors.LastActiveOwner;
     public static Error OrganizationNotActive => OrganizationDomainErrors.OrganizationNotActive;

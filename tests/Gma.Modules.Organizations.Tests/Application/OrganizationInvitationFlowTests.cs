@@ -106,6 +106,79 @@ public sealed class OrganizationInvitationFlowTests
     }
 
     [Fact]
+    public async Task Delegated_issuance_preserves_source_context_and_raw_issue_fails_closed()
+    {
+        TestRepository repository = CreateRepository();
+        Organization organization = Assert.Single(repository.Organizations);
+        repository.Memberships.Add(OrganizationMembership.Create(
+            Guid.NewGuid(),
+            organization.Id,
+            "manager",
+            DomainMembershipRole.Member,
+            "user:owner",
+            Guid.NewGuid(),
+            Now).Value);
+        TestClock clock = new();
+        SourceBoundJoinAuthorizationPolicy policy = new();
+        using ServiceProvider services = CreateServices(
+            repository,
+            clock,
+            joinSourceAuthorizationPolicy: policy);
+        var issue = services.GetRequiredService<ICommandHandler<
+            IssueOrganizationInvitationCommand,
+            OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
+        var create = services.GetRequiredService<
+            ICommandHandler<CreateOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
+        Guid sourceId = Guid.NewGuid();
+
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> issued =
+            await issue.HandleAsync(
+                new IssueOrganizationInvitationCommand(
+                    new OrganizationInvitationIssuanceRequest(
+                        sourceId,
+                        organization.Id,
+                        null,
+                        24,
+                        "manager",
+                        "user:manager")),
+                CancellationToken.None);
+        Result<OrganizationInvitationIssuedDto> raw = await create.HandleAsync(
+            new CreateOrganizationInvitationCommand(
+                organization.Id,
+                null,
+                24,
+                "manager",
+                "user:manager"),
+            CancellationToken.None);
+
+        Assert.True(issued.IsSuccess, issued.Error.Code);
+        Assert.True(raw.IsFailure);
+        Assert.Equal(
+            OrganizationApplicationErrors.JoinSourceManagementRequired,
+            raw.Error);
+        Assert.Collection(
+            policy.Contexts,
+            context =>
+            {
+                Assert.Equal(
+                    OrganizationJoinSourceAuthorizationOperation.IssueInvitation,
+                    context.Operation);
+                Assert.Equal(organization.Id, context.OrganizationId);
+                Assert.Equal("manager", context.SubjectId);
+                Assert.Equal(sourceId, context.SourceId);
+            },
+            context =>
+            {
+                Assert.Equal(
+                    OrganizationJoinSourceAuthorizationOperation.IssueInvitation,
+                    context.Operation);
+                Assert.Equal(organization.Id, context.OrganizationId);
+                Assert.Equal("manager", context.SubjectId);
+                Assert.Null(context.SourceId);
+            });
+    }
+
+    [Fact]
     public async Task Unbound_invitation_acceptance_is_idempotent_and_secret_is_not_persisted()
     {
         TestRepository repository = CreateRepository();
@@ -296,7 +369,9 @@ public sealed class OrganizationInvitationFlowTests
     private static ServiceProvider CreateServices(
         TestRepository repository,
         TestClock clock,
-        IOrganizationJoinAdmissionPolicy? joinPolicy = null)
+        IOrganizationJoinAdmissionPolicy? joinPolicy = null,
+        IOrganizationJoinSourceAuthorizationPolicy?
+            joinSourceAuthorizationPolicy = null)
     {
         IConfiguration configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -311,6 +386,10 @@ public sealed class OrganizationInvitationFlowTests
         if (joinPolicy is not null)
         {
             services.AddSingleton(joinPolicy);
+        }
+        if (joinSourceAuthorizationPolicy is not null)
+        {
+            services.AddSingleton(joinSourceAuthorizationPolicy);
         }
         services.AddSingleton<IOrganizationRepository>(repository);
         services.AddSingleton<ISystemClock>(clock);
@@ -329,6 +408,23 @@ public sealed class OrganizationInvitationFlowTests
         {
             this.Contexts.Add(context);
             return ValueTask.FromResult(this.IsAllowed);
+        }
+    }
+
+    private sealed class SourceBoundJoinAuthorizationPolicy
+        : IOrganizationJoinSourceAuthorizationPolicy
+    {
+        public List<OrganizationJoinSourceAuthorizationContext> Contexts { get; } = [];
+
+        public ValueTask<OrganizationJoinSourceAuthorizationDecision> EvaluateAsync(
+            OrganizationJoinSourceAuthorizationContext context,
+            CancellationToken cancellationToken = default)
+        {
+            this.Contexts.Add(context);
+            return ValueTask.FromResult(
+                context.SourceId.HasValue
+                    ? OrganizationJoinSourceAuthorizationDecision.Allowed
+                    : OrganizationJoinSourceAuthorizationDecision.Denied);
         }
     }
 

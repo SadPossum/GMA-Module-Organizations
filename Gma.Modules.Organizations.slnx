@@ -35,6 +35,7 @@
     <File Path="docs/organizations-mutation-admission-policy-task.md" />
     <File Path="docs/organizations-natural-expiry-task.md" />
     <File Path="docs/organizations-production-hardening-task.md" />
+    <File Path="docs/organizations-scope-lifecycle-task.md" />
     <File Path="docs/organizations-task.md" />
   </Folder>
   <Folder Name="/eng/">

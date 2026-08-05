@@ -14,6 +14,7 @@ using Gma.Modules.Organizations.Domain.Enums;
 
 internal sealed class ResolveOrganizationJoinRequestCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationJoinSourceAuthorization joinSourceAuthorization,
     OrganizationJoinAdmissionPolicy joinAdmissionPolicy,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<ResolveOrganizationJoinRequestCommand, OrganizationEnrollmentOutcomeDto>
@@ -22,11 +23,17 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
         ResolveOrganizationJoinRequestCommand command,
         CancellationToken cancellationToken)
     {
-        Result<OrganizationMembership> owner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
-            organizations, command.OrganizationId, command.SubjectId, cancellationToken).ConfigureAwait(false);
-        if (owner.IsFailure)
+        Result authorized = await joinSourceAuthorization.AuthorizeAsync(
+            new OrganizationJoinSourceAuthorizationContext(
+                OrganizationJoinSourceAuthorizationOperation.ResolveJoinRequest,
+                command.OrganizationId,
+                command.SubjectId,
+                ClaimId: command.ClaimId),
+            cancellationToken).ConfigureAwait(false);
+        if (authorized.IsFailure)
         {
-            return Result.Failure<OrganizationEnrollmentOutcomeDto>(owner.Error);
+            return Result.Failure<OrganizationEnrollmentOutcomeDto>(
+                authorized.Error);
         }
 
         OrganizationEnrollmentClaim? claim = await organizations.GetEnrollmentClaimAsync(

@@ -16,6 +16,7 @@ using Microsoft.Extensions.Options;
 
 internal sealed class IssueOrganizationInvitationCommandHandler(
     IOrganizationRepository organizations,
+    OrganizationJoinSourceAuthorization joinSourceAuthorization,
     OrganizationMutationAdmissionPolicy mutationAdmission,
     IOrganizationInvitationTokenService tokens,
     IOptions<OrganizationsOptions> options,
@@ -49,14 +50,16 @@ internal sealed class IssueOrganizationInvitationCommandHandler(
                 recipient.IsFailure ? recipient.Error : lifetime.Error);
         }
 
-        Result<OrganizationMembership> owner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
-            organizations,
-            request.OrganizationId,
-            subject.Value.Value,
+        Result authorized = await joinSourceAuthorization.AuthorizeAsync(
+            new OrganizationJoinSourceAuthorizationContext(
+                OrganizationJoinSourceAuthorizationOperation.IssueInvitation,
+                request.OrganizationId,
+                subject.Value.Value,
+                request.SourceId),
             cancellationToken).ConfigureAwait(false);
-        if (owner.IsFailure)
+        if (authorized.IsFailure)
         {
-            return Failure(owner.Error);
+            return Failure(authorized.Error);
         }
 
         Organization? organization = await organizations

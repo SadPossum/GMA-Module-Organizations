@@ -177,6 +177,63 @@ public sealed partial class OrganizationEnrollmentFlowTests
     }
 
     [Fact]
+    public async Task Delegated_resolution_preserves_the_exact_claim_context()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        Organization organization = Assert.Single(repository.Organizations);
+        repository.Memberships.Add(OrganizationMembership.Create(
+            Guid.NewGuid(),
+            organization.Id,
+            "manager",
+            DomainMembershipRole.Member,
+            "user:owner",
+            Guid.NewGuid(),
+            Now).Value);
+        ClaimBoundJoinAuthorizationPolicy authorizationPolicy = new();
+        using ServiceProvider services = CreateServices(
+            repository,
+            new TestClock(Now),
+            joinSourceAuthorizationPolicy: authorizationPolicy);
+        OrganizationEnrollmentLinkIssuedDto issued = await IssueAsync(
+            services,
+            repository,
+            OrganizationEnrollmentApprovalMode.RequiresApproval,
+            maximumClaims: 1);
+        var claimHandler = services.GetRequiredService<
+            ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>>();
+        var resolveHandler = services.GetRequiredService<
+            ICommandHandler<ResolveOrganizationJoinRequestCommand, OrganizationEnrollmentOutcomeDto>>();
+        Result<OrganizationEnrollmentOutcomeDto> pending = await claimHandler.HandleAsync(
+            new ClaimOrganizationEnrollmentLinkCommand(
+                issued.Token,
+                "member",
+                "user:member"),
+            CancellationToken.None);
+        authorizationPolicy.AllowedClaimId = pending.Value.Claim.ClaimId;
+
+        Result<OrganizationEnrollmentOutcomeDto> approved = await resolveHandler.HandleAsync(
+            new ResolveOrganizationJoinRequestCommand(
+                organization.Id,
+                pending.Value.Claim.ClaimId,
+                OrganizationJoinRequestDecision.Approve,
+                pending.Value.Claim.Version,
+                "manager",
+                "user:manager"),
+            CancellationToken.None);
+
+        Assert.True(approved.IsSuccess, approved.Error.Code);
+        OrganizationJoinSourceAuthorizationContext context = Assert.Single(
+            authorizationPolicy.Contexts);
+        Assert.Equal(
+            OrganizationJoinSourceAuthorizationOperation.ResolveJoinRequest,
+            context.Operation);
+        Assert.Equal(organization.Id, context.OrganizationId);
+        Assert.Equal("manager", context.SubjectId);
+        Assert.Null(context.SourceId);
+        Assert.Equal(pending.Value.Claim.ClaimId, context.ClaimId);
+    }
+
+    [Fact]
     public async Task Rejection_releases_capacity_and_does_not_create_a_membership()
     {
         TestOrganizationRepository repository = CreateRepository();
@@ -357,7 +414,9 @@ public sealed partial class OrganizationEnrollmentFlowTests
     private static ServiceProvider CreateServices(
         TestOrganizationRepository repository,
         TestClock clock,
-        IOrganizationJoinAdmissionPolicy? joinPolicy = null)
+        IOrganizationJoinAdmissionPolicy? joinPolicy = null,
+        IOrganizationJoinSourceAuthorizationPolicy?
+            joinSourceAuthorizationPolicy = null)
     {
         IConfiguration configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -374,6 +433,10 @@ public sealed partial class OrganizationEnrollmentFlowTests
         if (joinPolicy is not null)
         {
             services.AddSingleton(joinPolicy);
+        }
+        if (joinSourceAuthorizationPolicy is not null)
+        {
+            services.AddSingleton(joinSourceAuthorizationPolicy);
         }
         services.AddSingleton<IOrganizationRepository>(repository);
         services.AddSingleton<ISystemClock>(clock);
@@ -392,6 +455,26 @@ public sealed partial class OrganizationEnrollmentFlowTests
         {
             this.Contexts.Add(context);
             return ValueTask.FromResult(this.IsAllowed);
+        }
+    }
+
+    private sealed class ClaimBoundJoinAuthorizationPolicy
+        : IOrganizationJoinSourceAuthorizationPolicy
+    {
+        public Guid AllowedClaimId { get; set; }
+        public List<OrganizationJoinSourceAuthorizationContext> Contexts { get; } = [];
+
+        public ValueTask<OrganizationJoinSourceAuthorizationDecision> EvaluateAsync(
+            OrganizationJoinSourceAuthorizationContext context,
+            CancellationToken cancellationToken = default)
+        {
+            this.Contexts.Add(context);
+            return ValueTask.FromResult(
+                context.Operation ==
+                    OrganizationJoinSourceAuthorizationOperation.ResolveJoinRequest &&
+                context.ClaimId == this.AllowedClaimId
+                    ? OrganizationJoinSourceAuthorizationDecision.Allowed
+                    : OrganizationJoinSourceAuthorizationDecision.Denied);
         }
     }
 }

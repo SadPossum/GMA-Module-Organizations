@@ -12,17 +12,23 @@ using Gma.Modules.Organizations.Domain.Aggregates;
 
 internal sealed class ListOrganizationEnrollmentLinksQueryHandler(
     IOrganizationRepository organizations,
+    OrganizationJoinSourceAuthorization joinSourceAuthorization,
     ISystemClock clock) : IQueryHandler<ListOrganizationEnrollmentLinksQuery, OrganizationEnrollmentLinkListResponse>
 {
     public async Task<Result<OrganizationEnrollmentLinkListResponse>> HandleAsync(
         ListOrganizationEnrollmentLinksQuery query,
         CancellationToken cancellationToken)
     {
-        Result<OrganizationMembership> owner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
-            organizations, query.OrganizationId, query.SubjectId, cancellationToken).ConfigureAwait(false);
-        if (owner.IsFailure)
+        Result authorized = await joinSourceAuthorization.AuthorizeAsync(
+            new OrganizationJoinSourceAuthorizationContext(
+                OrganizationJoinSourceAuthorizationOperation.ReadEnrollmentLinks,
+                query.OrganizationId,
+                query.SubjectId),
+            cancellationToken).ConfigureAwait(false);
+        if (authorized.IsFailure)
         {
-            return Result.Failure<OrganizationEnrollmentLinkListResponse>(owner.Error);
+            return Result.Failure<OrganizationEnrollmentLinkListResponse>(
+                authorized.Error);
         }
 
         PageRequest page = PageRequest.Normalize(query.Page, query.PageSize);

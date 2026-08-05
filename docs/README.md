@@ -48,6 +48,9 @@ pending join requests is tracked in
 The exact enrollment-claim reconciliation contract is tracked in
 [Organizations Enrollment Claim Inspection Task](organizations-enrollment-claim-inspection-task.md).
 
+The product-neutral complete-scope export and destruction facade is tracked in
+[Organizations Scope Lifecycle Task](organizations-scope-lifecycle-task.md).
+
 ## Owned behavior
 
 - organizations and immutable organization-to-scope identity;

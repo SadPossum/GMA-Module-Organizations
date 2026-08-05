@@ -1,5 +1,6 @@
 namespace Gma.Modules.Organizations.Tests.Persistence;
 
+using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Persistence;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -10,6 +11,28 @@ using Xunit;
 [Trait("Category", "Unit")]
 public sealed class OrganizationsLifecycleOptionsTests
 {
+    [Fact]
+    public void Scope_lifecycle_facade_is_registered_by_persistence()
+    {
+        HostApplicationBuilder builder = new(new HostApplicationBuilderSettings
+        {
+            DisableDefaults = true
+        });
+        builder.Configuration.AddInMemoryCollection(new Dictionary<string, string?>
+        {
+            ["ConnectionStrings:SqlServer"] =
+                "Server=localhost;Database=organizations-tests;Integrated Security=true;TrustServerCertificate=true"
+        });
+
+        builder.AddOrganizationsPersistence();
+
+        Assert.Contains(builder.Services, descriptor =>
+            descriptor.ServiceType == typeof(IOrganizationScopeLifecycle) &&
+            descriptor.ImplementationType ==
+                typeof(OrganizationScopeLifecycleService) &&
+            descriptor.Lifetime == ServiceLifetime.Scoped);
+    }
+
     [Fact]
     public void Lifecycle_is_disabled_by_default_with_valid_bounded_settings()
     {

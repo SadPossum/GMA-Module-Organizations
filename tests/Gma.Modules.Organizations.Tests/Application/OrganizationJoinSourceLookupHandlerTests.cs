@@ -3,10 +3,12 @@ namespace Gma.Modules.Organizations.Tests.Application;
 using Gma.Framework.Results;
 using Gma.Modules.Organizations.Application;
 using Gma.Modules.Organizations.Application.Handlers;
+using Gma.Modules.Organizations.Application.Policies;
 using Gma.Modules.Organizations.Application.Queries;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Tests.Support;
+using Microsoft.Extensions.Logging.Abstractions;
 using DomainEnrollmentMode = Gma.Modules.Organizations.Domain.Enums.OrganizationEnrollmentApprovalMode;
 using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipRole;
 using Xunit;
@@ -30,8 +32,15 @@ public sealed class OrganizationJoinSourceLookupHandlerTests
         repository.Invitations.Add(invitation);
         repository.EnrollmentLinks.Add(link);
 
-        GetOrganizationInvitationQueryHandler invitations = new(repository, new TestClock(Now));
-        GetOrganizationEnrollmentLinkQueryHandler links = new(repository, new TestClock(Now));
+        OrganizationJoinSourceAuthorization authorization = Authorization(repository);
+        GetOrganizationInvitationQueryHandler invitations = new(
+            repository,
+            authorization,
+            new TestClock(Now));
+        GetOrganizationEnrollmentLinkQueryHandler links = new(
+            repository,
+            authorization,
+            new TestClock(Now));
 
         Result<OrganizationInvitationDto> selectedInvitation = await invitations.HandleAsync(
             new GetOrganizationInvitationQuery(organization.Id, invitation.Id, "owner"),
@@ -52,8 +61,15 @@ public sealed class OrganizationJoinSourceLookupHandlerTests
     {
         TestOrganizationRepository repository = CreateRepository();
         Organization organization = Assert.Single(repository.Organizations);
-        GetOrganizationInvitationQueryHandler invitations = new(repository, new TestClock(Now));
-        GetOrganizationEnrollmentLinkQueryHandler links = new(repository, new TestClock(Now));
+        OrganizationJoinSourceAuthorization authorization = Authorization(repository);
+        GetOrganizationInvitationQueryHandler invitations = new(
+            repository,
+            authorization,
+            new TestClock(Now));
+        GetOrganizationEnrollmentLinkQueryHandler links = new(
+            repository,
+            authorization,
+            new TestClock(Now));
 
         Result<OrganizationInvitationDto> selectedInvitation = await invitations.HandleAsync(
             new GetOrganizationInvitationQuery(organization.Id, Guid.NewGuid(), "not-an-owner"),
@@ -62,8 +78,8 @@ public sealed class OrganizationJoinSourceLookupHandlerTests
             new GetOrganizationEnrollmentLinkQuery(organization.Id, Guid.NewGuid(), "not-an-owner"),
             CancellationToken.None);
 
-        Assert.Equal(OrganizationApplicationErrors.OwnerRequired, selectedInvitation.Error);
-        Assert.Equal(OrganizationApplicationErrors.OwnerRequired, selectedLink.Error);
+        Assert.Equal(OrganizationApplicationErrors.MembershipRequired, selectedInvitation.Error);
+        Assert.Equal(OrganizationApplicationErrors.MembershipRequired, selectedLink.Error);
         Assert.Equal(2, repository.MembershipReadCount);
         Assert.Equal(0, repository.InvitationReadCount);
         Assert.Equal(0, repository.EnrollmentLinkReadCount);
@@ -78,4 +94,10 @@ public sealed class OrganizationJoinSourceLookupHandlerTests
             "owner", Guid.NewGuid(), Now).Value;
         return new TestOrganizationRepository(organization, owner);
     }
+
+    private static OrganizationJoinSourceAuthorization Authorization(
+        TestOrganizationRepository repository) => new(
+        repository,
+        [],
+        NullLogger<OrganizationJoinSourceAuthorization>.Instance);
 }
