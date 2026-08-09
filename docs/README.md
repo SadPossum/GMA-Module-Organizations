@@ -60,6 +60,9 @@ Retry safety for the three-aggregate ownership handoff is tracked in
 [Organizations Ownership Transfer Retry Safety Task](organizations-ownership-transfer-retry-safety-task.md).
 Retry safety for profile and lifecycle mutations is tracked in
 [Organizations Profile And Lifecycle Retry Safety Task](organizations-profile-lifecycle-retry-safety-task.md).
+Stable HTTP classification for lifecycle and membership state conflicts is
+tracked in
+[Organizations HTTP State Conflict Task](organizations-http-state-conflict-task.md).
 Retry safety for owner-initiated membership suspension, resumption, and removal
 is tracked in
 [Organizations Membership Mutation Retry Safety Task](organizations-membership-mutation-retry-safety-task.md).
