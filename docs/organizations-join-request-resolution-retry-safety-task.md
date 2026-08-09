@@ -1,6 +1,6 @@
 # Organizations Join-Request Resolution Retry Safety Task
 
-Status: implemented; consumer verification pending
+Status: completed
 Date: 2026-08-09
 
 ## Goal
@@ -59,7 +59,7 @@ versions must not bypass the normal join-request transition.
 - [x] Prove rejection replay cannot release capacity reserved by later work.
 - [x] Preserve conflict behavior for opposite decisions and broken
   correlations.
-- [ ] Run focused unit tests, then one completed-slice Organizations gate and
+- [x] Run focused unit tests, then one completed-slice Organizations gate and
   consumer verification before publication.
 
 ## Module Verification
@@ -76,7 +76,18 @@ versions must not bypass the normal join-request transition.
 
 ## Consumer Verification
 
-Pending against the exact implementation commit.
+- GMA Skeleton at `487aa79`, with Organizations at implementation commit
+  `1b852d2`, passes its full non-Docker `eng/verify.ps1` gate: synchronized
+  source solutions and packages, the generated application-selection matrix,
+  a zero-warning build, all migration drift checks, 269 architecture tests, 17
+  integration tests, and every fast suite are green.
+- BunkFy backend at `ef97494`, with Organizations at implementation commit
+  `1b852d2`, passes its full non-Docker `eng/verify.ps1` gate: synchronized
+  source packages, a zero-warning build, every GMA and product migration drift
+  check, 94 architecture tests, 54 integration tests, and every fast suite are
+  green.
+- No public contract shape changed, so OpenAPI and TypeScript regeneration was
+  not required. The BunkFy web application was not changed.
 
 ## Not In This Slice
 
