@@ -120,6 +120,38 @@ public sealed class OrganizationEndpointSupportTests
         Assert.Equal(expectedStatusCode, statusCode);
     }
 
+    [Fact]
+    public void Persisted_state_and_product_policy_conflicts_are_http_conflicts()
+    {
+        Error[] conflicts =
+        [
+            OrganizationApplicationErrors.MembershipChangeRejected,
+            OrganizationApplicationErrors.OrganizationNotActive,
+            OrganizationApplicationErrors.OrganizationAlreadySuspended,
+            OrganizationApplicationErrors.OrganizationNotSuspended,
+            OrganizationApplicationErrors.OrganizationArchived,
+            OrganizationApplicationErrors.MembershipNotActive,
+            OrganizationApplicationErrors.MembershipAlreadySuspended,
+            OrganizationApplicationErrors.MembershipNotSuspended,
+            OrganizationApplicationErrors.MembershipRemoved,
+            OrganizationApplicationErrors.MembershipAlreadyOwner,
+            OrganizationApplicationErrors.MembershipNotOwner
+        ];
+
+        Assert.All(conflicts, error => Assert.Equal(
+            StatusCodes.Status409Conflict,
+            OrganizationEndpointSupport.ErrorStatusCodes.GetStatusCode(error)));
+    }
+
+    [Fact]
+    public void Unmapped_input_validation_failure_remains_a_bad_request()
+    {
+        Assert.Equal(
+            StatusCodes.Status400BadRequest,
+            OrganizationEndpointSupport.ErrorStatusCodes.GetStatusCode(
+                Gma.Modules.Organizations.Domain.Errors.OrganizationDomainErrors.NameInvalid));
+    }
+
     [Theory]
     [InlineData(ApplicationClaimNames.Subject)]
     [InlineData(ClaimTypes.NameIdentifier)]

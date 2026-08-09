@@ -44,6 +44,12 @@ public static class OrganizationApplicationErrors
     public static Error OrganizationAlreadySuspended => OrganizationDomainErrors.OrganizationAlreadySuspended;
     public static Error OrganizationNotSuspended => OrganizationDomainErrors.OrganizationNotSuspended;
     public static Error OrganizationArchived => OrganizationDomainErrors.OrganizationArchived;
+    public static Error MembershipNotActive => OrganizationDomainErrors.MembershipNotActive;
+    public static Error MembershipAlreadySuspended => OrganizationDomainErrors.MembershipAlreadySuspended;
+    public static Error MembershipNotSuspended => OrganizationDomainErrors.MembershipNotSuspended;
+    public static Error MembershipRemoved => OrganizationDomainErrors.MembershipRemoved;
+    public static Error MembershipAlreadyOwner => OrganizationDomainErrors.MembershipAlreadyOwner;
+    public static Error MembershipNotOwner => OrganizationDomainErrors.MembershipNotOwner;
     public static Error InvitationExpired => OrganizationDomainErrors.InvitationExpired;
     public static Error InvitationUnavailable => OrganizationDomainErrors.InvitationUnavailable;
     public static Error InvitationClaimedByAnotherSubject => OrganizationDomainErrors.InvitationClaimedByAnotherSubject;
