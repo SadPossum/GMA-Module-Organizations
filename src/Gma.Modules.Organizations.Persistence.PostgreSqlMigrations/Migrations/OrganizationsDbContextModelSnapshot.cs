@@ -257,6 +257,8 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
 
                     b.HasIndex("OrganizationId", "Status", "CreatedAtUtc");
 
+                    b.HasIndex("OrganizationId", "SubjectId", "Status", "DecisionExpiresAtUtc");
+
                     b.ToTable("organization_enrollment_claims", "organizations");
                 });
 

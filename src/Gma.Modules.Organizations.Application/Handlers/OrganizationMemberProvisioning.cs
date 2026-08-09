@@ -11,6 +11,7 @@ internal static class OrganizationMemberProvisioning
 {
     public static async Task<Result<OrganizationMembership>> EnsureActiveMemberAsync(
         IOrganizationRepository organizations,
+        OrganizationMembership? membership,
         Guid organizationId,
         string subjectId,
         string actorId,
@@ -18,8 +19,6 @@ internal static class OrganizationMemberProvisioning
         IIdGenerator ids,
         CancellationToken cancellationToken)
     {
-        OrganizationMembership? membership = await organizations.GetMembershipAsync(
-            organizationId, subjectId, cancellationToken).ConfigureAwait(false);
         if (membership is { Status: OrganizationMembershipState.Active })
         {
             return Result.Success(membership);

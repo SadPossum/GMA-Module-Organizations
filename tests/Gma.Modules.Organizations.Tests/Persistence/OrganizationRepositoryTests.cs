@@ -86,6 +86,59 @@ public sealed class OrganizationRepositoryTests
     }
 
     [Fact]
+    public void Enrollment_claim_model_has_a_join_subject_lookup_index()
+    {
+        using OrganizationsDbContext dbContext = CreateDbContext();
+
+        var entity = dbContext.Model.FindEntityType(typeof(OrganizationEnrollmentClaim));
+        Assert.Single(entity!.GetIndexes(), item =>
+            item.Properties.Select(property => property.Name).SequenceEqual(
+                [nameof(OrganizationEnrollmentClaim.OrganizationId),
+                 nameof(OrganizationEnrollmentClaim.SubjectId),
+                 nameof(OrganizationEnrollmentClaim.Status),
+                 nameof(OrganizationEnrollmentClaim.DecisionExpiresAtUtc)]));
+    }
+
+    [Fact]
+    public async Task Join_subject_lookup_ignores_other_subjects_and_overdue_requests()
+    {
+        await using OrganizationsDbContext dbContext = CreateDbContext();
+        Organization organization = CreateOrganization("Join House", "join-house");
+        dbContext.AddRange(
+            organization,
+            CreatePendingClaim(
+                organization.Id,
+                Guid.NewGuid(),
+                "current",
+                Now.AddHours(-1),
+                Now.AddHours(1)),
+            CreatePendingClaim(
+                organization.Id,
+                Guid.NewGuid(),
+                "overdue",
+                Now.AddDays(-8),
+                Now.AddMinutes(-1)));
+        await dbContext.SaveChangesAsync();
+        OrganizationRepository repository = new(dbContext);
+
+        Assert.True(await repository.HasCurrentPendingEnrollmentClaimAsync(
+            organization.Id,
+            "current",
+            Now,
+            CancellationToken.None));
+        Assert.False(await repository.HasCurrentPendingEnrollmentClaimAsync(
+            organization.Id,
+            "overdue",
+            Now,
+            CancellationToken.None));
+        Assert.False(await repository.HasCurrentPendingEnrollmentClaimAsync(
+            organization.Id,
+            "missing",
+            Now,
+            CancellationToken.None));
+    }
+
+    [Fact]
     public async Task Join_request_queries_hide_overdue_pending_claims_during_worker_lag()
     {
         await using OrganizationsDbContext dbContext = CreateDbContext();

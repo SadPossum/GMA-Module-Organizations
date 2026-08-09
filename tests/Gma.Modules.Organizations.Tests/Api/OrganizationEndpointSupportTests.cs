@@ -87,6 +87,15 @@ public sealed class OrganizationEndpointSupportTests
             OrganizationEndpointSupport.ErrorStatusCodes.GetStatusCode(error));
     }
 
+    [Fact]
+    public void Competing_join_request_is_an_http_conflict()
+    {
+        Assert.Equal(
+            StatusCodes.Status409Conflict,
+            OrganizationEndpointSupport.ErrorStatusCodes.GetStatusCode(
+                OrganizationApplicationErrors.JoinRequestConflict));
+    }
+
     [Theory]
     [InlineData("Organizations.MutationRejected", StatusCodes.Status409Conflict)]
     [InlineData("Organizations.MutationAdmissionUnavailable", StatusCodes.Status503ServiceUnavailable)]

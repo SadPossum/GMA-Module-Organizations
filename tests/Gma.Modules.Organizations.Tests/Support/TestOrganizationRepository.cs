@@ -80,6 +80,17 @@ internal sealed class TestOrganizationRepository(
         Task.FromResult(this.EnrollmentClaims.SingleOrDefault(item =>
             item.EnrollmentLinkId == enrollmentLinkId && item.SubjectId == subjectId.Trim()));
 
+    public Task<bool> HasCurrentPendingEnrollmentClaimAsync(
+        Guid organizationId,
+        string subjectId,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken) =>
+        Task.FromResult(this.EnrollmentClaims.Any(item =>
+            item.OrganizationId == organizationId &&
+            item.SubjectId == subjectId.Trim() &&
+            item.Status == OrganizationEnrollmentClaimState.Pending &&
+            item.DecisionExpiresAtUtc > nowUtc));
+
     public Task<bool> SlugExistsAsync(
         string slug, Guid? excludingOrganizationId, CancellationToken cancellationToken) =>
         Task.FromResult(this.Organizations.Any(item =>

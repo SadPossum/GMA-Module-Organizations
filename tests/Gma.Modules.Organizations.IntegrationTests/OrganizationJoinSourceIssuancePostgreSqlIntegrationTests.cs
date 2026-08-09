@@ -233,6 +233,95 @@ public sealed class OrganizationJoinSourceIssuancePostgreSqlIntegrationTests
             provider,
             organizationId,
             created.Value.Organization.Version);
+        await VerifyJoinSubjectCoordinationAsync(provider, organizationId);
+    }
+
+    private static async Task VerifyJoinSubjectCoordinationAsync(
+        ServiceProvider provider,
+        Guid organizationId)
+    {
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> firstLink =
+            await DispatchAsync(provider, Enrollment(organizationId, Guid.NewGuid(), 5));
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> secondLink =
+            await DispatchAsync(provider, Enrollment(organizationId, Guid.NewGuid(), 5));
+        Assert.True(firstLink.IsSuccess, firstLink.Error.Code);
+        Assert.True(secondLink.IsSuccess, secondLink.Error.Code);
+
+        Result<OrganizationEnrollmentOutcomeDto>[] competing = await Task.WhenAll(
+            DispatchAsync(
+                provider,
+                new ClaimOrganizationEnrollmentLinkCommand(
+                    Assert.IsType<string>(firstLink.Value.Token),
+                    "join-race-member",
+                    "user:join-race-member")),
+            DispatchAsync(
+                provider,
+                new ClaimOrganizationEnrollmentLinkCommand(
+                    Assert.IsType<string>(secondLink.Value.Token),
+                    "join-race-member",
+                    "user:join-race-member")));
+
+        Assert.Single(competing, result => result.IsSuccess);
+        Assert.Single(competing, result =>
+            result.IsFailure &&
+            result.Error.Code == OrganizationApplicationErrors.JoinRequestConflict.Code);
+
+        await using (AsyncServiceScope verificationScope = provider.CreateAsyncScope())
+        {
+            OrganizationsDbContext dbContext = verificationScope.ServiceProvider
+                .GetRequiredService<OrganizationsDbContext>();
+            Assert.Single(await dbContext.EnrollmentClaims
+                .Where(item =>
+                    item.OrganizationId == organizationId &&
+                    item.SubjectId == "join-race-member")
+                .ToArrayAsync());
+            int reservedClaims = await dbContext.EnrollmentLinks
+                .Where(item =>
+                    item.Id == firstLink.Value.Source!.EnrollmentLinkId ||
+                    item.Id == secondLink.Value.Source!.EnrollmentLinkId)
+                .SumAsync(item => item.ReservedClaims);
+            Assert.Equal(1, reservedClaims);
+        }
+
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> unrelatedLink =
+            await DispatchAsync(provider, Enrollment(organizationId, Guid.NewGuid(), 5));
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> blockedLink =
+            await DispatchAsync(provider, Enrollment(organizationId, Guid.NewGuid(), 5));
+        Assert.True(unrelatedLink.IsSuccess, unrelatedLink.Error.Code);
+        Assert.True(blockedLink.IsSuccess, blockedLink.Error.Code);
+
+        await using AsyncServiceScope holderScope = provider.CreateAsyncScope();
+        OrganizationsDbContext holderDbContext = holderScope.ServiceProvider
+            .GetRequiredService<OrganizationsDbContext>();
+        await using var holderTransaction = await holderDbContext.Database.BeginTransactionAsync();
+        IOrganizationJoinSubjectCoordinator joinSubjects = holderScope.ServiceProvider
+            .GetRequiredService<IOrganizationJoinSubjectCoordinator>();
+        await joinSubjects.AcquireAsync(
+            organizationId,
+            "held-member",
+            CancellationToken.None);
+
+        Result<OrganizationEnrollmentOutcomeDto> unrelated = await DispatchAsync(
+                provider,
+                new ClaimOrganizationEnrollmentLinkCommand(
+                    Assert.IsType<string>(unrelatedLink.Value.Token),
+                    "other-member",
+                    "user:other-member"))
+            .WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(unrelated.IsSuccess, unrelated.Error.Code);
+
+        Task<Result<OrganizationEnrollmentOutcomeDto>> blocked = DispatchAsync(
+            provider,
+            new ClaimOrganizationEnrollmentLinkCommand(
+                Assert.IsType<string>(blockedLink.Value.Token),
+                "held-member",
+                "user:held-member"));
+        await AssertBlockedAsync(blocked);
+
+        await holderTransaction.RollbackAsync();
+        Result<OrganizationEnrollmentOutcomeDto> released =
+            await blocked.WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(released.IsSuccess, released.Error.Code);
     }
 
     private static async Task VerifyGovernanceCoordinationAsync(
@@ -388,7 +477,7 @@ public sealed class OrganizationJoinSourceIssuancePostgreSqlIntegrationTests
     private static async Task AssertBlockedAsync(Task task)
     {
         await Task.Delay(TimeSpan.FromMilliseconds(250));
-        Assert.False(task.IsCompleted, "The conflicting governance operation did not wait for the transaction lock.");
+        Assert.False(task.IsCompleted, "The conflicting operation did not wait for the transaction lock.");
     }
 
     private static ServiceProvider CreateProvider(string connectionString)

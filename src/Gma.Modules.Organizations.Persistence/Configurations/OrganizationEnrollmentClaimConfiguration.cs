@@ -23,6 +23,13 @@ internal sealed class OrganizationEnrollmentClaimConfiguration
             .IsRequired();
         builder.HasIndex(claim => new { claim.EnrollmentLinkId, claim.SubjectId }).IsUnique();
         builder.HasIndex(claim => new { claim.OrganizationId, claim.Status, claim.CreatedAtUtc });
+        builder.HasIndex(claim => new
+        {
+            claim.OrganizationId,
+            claim.SubjectId,
+            claim.Status,
+            claim.DecisionExpiresAtUtc
+        });
         builder.HasIndex(claim => new { claim.Status, claim.DecisionExpiresAtUtc });
         builder.HasOne<Organization>()
             .WithMany()

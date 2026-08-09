@@ -103,6 +103,66 @@ public sealed class OrganizationGovernanceCoordinationTests
         Assert.Empty(governance.Acquisitions);
     }
 
+    [Fact]
+    public async Task Invitation_acceptance_acquires_governance_then_join_subject_before_join_reads()
+    {
+        (TestOrganizationRepository repository, Organization organization, _) =
+            CreateRepository(includeMember: false);
+        List<string> order = [];
+        TestOrganizationGovernanceCoordinator governance = new(
+            (_, mode) =>
+            {
+                Assert.Equal(TestOrganizationGovernanceMode.Shared, mode);
+                order.Add("governance");
+            });
+        TestOrganizationJoinSubjectCoordinator joinSubjects = new(
+            (organizationId, subjectId) =>
+            {
+                Assert.Equal(organization.Id, organizationId);
+                Assert.Equal("member", subjectId);
+                Assert.Equal(["governance"], order);
+                order.Add("join-subject");
+            });
+        using ServiceProvider services = CreateServices(
+            repository,
+            governance,
+            joinSubjects);
+        var issue = services.GetRequiredService<ICommandHandler<
+            IssueOrganizationInvitationCommand,
+            OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
+        var issued = await issue.HandleAsync(
+            new IssueOrganizationInvitationCommand(new OrganizationInvitationIssuanceRequest(
+                Guid.NewGuid(),
+                organization.Id,
+                null,
+                null,
+                "owner",
+                "user:owner")),
+            CancellationToken.None);
+        Assert.True(issued.IsSuccess, issued.Error.Code);
+        order.Clear();
+        governance.Acquisitions.Clear();
+        repository.OnGovernanceRead = () => Assert.Equal(
+            ["governance", "join-subject"],
+            order);
+        var accept = services.GetRequiredService<ICommandHandler<
+            AcceptOrganizationInvitationCommand,
+            OrganizationInvitationAcceptanceDto>>();
+
+        var result = await accept.HandleAsync(
+            new AcceptOrganizationInvitationCommand(
+                Assert.IsType<string>(issued.Value.Token),
+                "member",
+                "user:member"),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error.Code);
+        Assert.Equal(["governance", "join-subject"], order);
+        Assert.Equal(
+            (organization.Id, "member"),
+            Assert.Single(joinSubjects.Acquisitions));
+    }
+
     private static void AssertAcquired(
         TestOrganizationGovernanceCoordinator governance,
         Guid organizationId,
@@ -152,12 +212,17 @@ public sealed class OrganizationGovernanceCoordinationTests
 
     private static ServiceProvider CreateServices(
         TestOrganizationRepository repository,
-        TestOrganizationGovernanceCoordinator governance)
+        TestOrganizationGovernanceCoordinator governance,
+        TestOrganizationJoinSubjectCoordinator? joinSubjects = null)
     {
         ServiceCollection services = new();
         services.AddOrganizationsApplication(new ConfigurationBuilder().Build());
         services.AddSingleton<IOrganizationGovernanceCoordinator>(governance);
+        services.AddSingleton<IOrganizationJoinSubjectCoordinator>(
+            joinSubjects ?? new TestOrganizationJoinSubjectCoordinator());
         services.AddSingleton<IOrganizationRepository>(repository);
+        services.AddSingleton<IOrganizationJoinSourceIssuanceCoordinator>(
+            new TestOrganizationJoinSourceIssuanceCoordinator(repository));
         services.AddSingleton<ISystemClock>(new TestClock(Now.AddMinutes(1)));
         services.AddSingleton<IIdGenerator>(new TestIds());
         return services.BuildServiceProvider();

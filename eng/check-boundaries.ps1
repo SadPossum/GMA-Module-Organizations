@@ -73,6 +73,11 @@ $uncoordinatedHandlers = @(
     'ExpireOrganizationEnrollmentLinksCommandHandler',
     'ExpireOrganizationInvitationsCommandHandler'
 )
+$joinSubjectHandlers = @(
+    'AcceptOrganizationInvitationCommandHandler',
+    'ClaimOrganizationEnrollmentLinkCommandHandler',
+    'ResolveOrganizationJoinRequestCommandHandler'
+)
 $classifiedHandlers = @(
     $sharedGovernanceHandlers
     $exclusiveGovernanceHandlers
@@ -112,6 +117,16 @@ foreach ($handlerName in $classifiedHandlers) {
         $errors.Add("$($handler.Name) is classified as intentionally uncoordinated but acquires governance.")
     }
 
+    $joinSubjectCount = [regex]::Matches(
+        $source,
+        'joinSubjects\.AcquireAsync\(').Count
+    if ($handlerName -in $joinSubjectHandlers -and $joinSubjectCount -ne 1) {
+        $errors.Add("$($handler.Name) must acquire join-subject coordination exactly once.")
+    }
+    elseif ($handlerName -notin $joinSubjectHandlers -and $joinSubjectCount -ne 0) {
+        $errors.Add("$($handler.Name) acquires join-subject coordination without an explicit classification.")
+    }
+
     if ($handlerName -in $sharedGovernanceHandlers -or
         $handlerName -in $exclusiveGovernanceHandlers) {
         $commandName = $handlerName -replace 'Handler$', ''
@@ -143,6 +158,23 @@ foreach ($handlerName in $classifiedHandlers) {
         if ($sourceLockMatch.Success -and
             $acquisitionMatch.Index -gt $sourceLockMatch.Index) {
             $errors.Add("$($handler.Name) acquires a join-source lock before organization governance.")
+        }
+
+        if ($handlerName -in $joinSubjectHandlers) {
+            $joinSubjectMatch = [regex]::Match(
+                $source,
+                'joinSubjects\.AcquireAsync\(')
+            if ($joinSubjectMatch.Index -lt $acquisitionMatch.Index) {
+                $errors.Add("$($handler.Name) acquires join-subject coordination before organization governance.")
+            }
+
+            $joinStateReadMatch = [regex]::Match(
+                $source,
+                'organizations\s*\.\s*(?:GetOrganizationAsync|GetMembershipAsync|HasCurrentPendingEnrollmentClaimAsync)|(?:admissionPolicy|joinAdmissionPolicy)\.(?:CanAcceptInvitationAsync|IsAllowedAsync)|OrganizationMemberProvisioning\.EnsureActiveMemberAsync')
+            if ($joinStateReadMatch.Success -and
+                $joinSubjectMatch.Index -gt $joinStateReadMatch.Index) {
+                $errors.Add("$($handler.Name) reads join-subject state before acquiring its transaction lock.")
+            }
         }
     }
 }

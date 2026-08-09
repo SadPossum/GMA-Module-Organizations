@@ -15,6 +15,7 @@ using Gma.Modules.Organizations.Domain.Enums;
 internal sealed class ResolveOrganizationJoinRequestCommandHandler(
     IOrganizationRepository organizations,
     IOrganizationGovernanceCoordinator governance,
+    IOrganizationJoinSubjectCoordinator joinSubjects,
     OrganizationJoinSourceAuthorization joinSourceAuthorization,
     OrganizationJoinAdmissionPolicy joinAdmissionPolicy,
     ISystemClock clock,
@@ -98,6 +99,11 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
                 Gma.Modules.Organizations.Domain.Errors.OrganizationDomainErrors.EnrollmentClaimUnavailable);
         }
 
+        await joinSubjects.AcquireAsync(
+            command.OrganizationId,
+            claim.SubjectId,
+            cancellationToken).ConfigureAwait(false);
+
         Organization? organization = await organizations.GetOrganizationAsync(
             command.OrganizationId, cancellationToken).ConfigureAwait(false);
         if (organization is not { Status: OrganizationState.Active })
@@ -105,6 +111,16 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
             return Result.Failure<OrganizationEnrollmentOutcomeDto>(organization is null
                 ? OrganizationApplicationErrors.OrganizationNotFound
                 : Gma.Modules.Organizations.Domain.Errors.OrganizationDomainErrors.OrganizationNotActive);
+        }
+
+        OrganizationMembership? existingMembership = await organizations.GetMembershipAsync(
+            organization.Id,
+            claim.SubjectId,
+            cancellationToken).ConfigureAwait(false);
+        if (existingMembership is { Status: OrganizationMembershipState.Active })
+        {
+            return Result.Failure<OrganizationEnrollmentOutcomeDto>(
+                OrganizationApplicationErrors.MembershipConflict);
         }
 
         bool productReady = await joinAdmissionPolicy.IsAllowedAsync(
@@ -124,7 +140,7 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
         }
 
         Result<OrganizationMembership> membership = await OrganizationMemberProvisioning.EnsureActiveMemberAsync(
-            organizations, organization.Id, claim.SubjectId, command.ActorId,
+            organizations, existingMembership, organization.Id, claim.SubjectId, command.ActorId,
             nowUtc, ids, cancellationToken).ConfigureAwait(false);
         if (membership.IsFailure)
         {

@@ -88,6 +88,23 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
             cancellationToken);
     }
 
+    public Task<bool> HasCurrentPendingEnrollmentClaimAsync(
+        Guid organizationId,
+        string subjectId,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken)
+    {
+        string normalizedSubject = subjectId.Trim();
+        return dbContext.EnrollmentClaims
+            .AsNoTracking()
+            .AnyAsync(
+                claim => claim.OrganizationId == organizationId &&
+                         claim.SubjectId == normalizedSubject &&
+                         claim.Status == OrganizationEnrollmentClaimState.Pending &&
+                         claim.DecisionExpiresAtUtc > nowUtc,
+                cancellationToken);
+    }
+
     public Task<bool> SlugExistsAsync(
         string slug,
         Guid? excludingOrganizationId,

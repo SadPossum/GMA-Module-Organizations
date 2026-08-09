@@ -16,6 +16,11 @@ public interface IOrganizationRepository
     Task<OrganizationEnrollmentLink?> GetEnrollmentLinkByDigestAsync(string tokenDigest, CancellationToken cancellationToken);
     Task<OrganizationEnrollmentClaim?> GetEnrollmentClaimAsync(Guid organizationId, Guid claimId, CancellationToken cancellationToken);
     Task<OrganizationEnrollmentClaim?> GetEnrollmentClaimBySubjectAsync(Guid enrollmentLinkId, string subjectId, CancellationToken cancellationToken);
+    Task<bool> HasCurrentPendingEnrollmentClaimAsync(
+        Guid organizationId,
+        string subjectId,
+        DateTimeOffset nowUtc,
+        CancellationToken cancellationToken);
     Task<bool> SlugExistsAsync(string slug, Guid? excludingOrganizationId, CancellationToken cancellationToken);
     Task<bool> MembershipExistsAsync(Guid organizationId, string subjectId, CancellationToken cancellationToken);
     Task<OrganizationListResponse> ListForSubjectAsync(

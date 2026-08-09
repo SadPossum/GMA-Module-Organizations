@@ -11,12 +11,14 @@ using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
+using Gma.Modules.Organizations.Domain.ValueObjects;
 using Microsoft.Extensions.Options;
 using DomainApprovalMode = Gma.Modules.Organizations.Domain.Enums.OrganizationEnrollmentApprovalMode;
 
 internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
     IOrganizationRepository organizations,
     IOrganizationGovernanceCoordinator governance,
+    IOrganizationJoinSubjectCoordinator joinSubjects,
     IOrganizationEnrollmentTokenService tokens,
     OrganizationJoinAdmissionPolicy joinAdmissionPolicy,
     ISystemClock clock,
@@ -40,8 +42,18 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
             return Result.Failure<OrganizationEnrollmentOutcomeDto>(OrganizationApplicationErrors.EnrollmentTokenInvalid);
         }
 
+        Result<OrganizationSubjectId> subject = OrganizationSubjectId.Create(command.SubjectId);
+        if (subject.IsFailure)
+        {
+            return Result.Failure<OrganizationEnrollmentOutcomeDto>(subject.Error);
+        }
+
         await governance.AcquireSharedAsync(
             link.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
+        await joinSubjects.AcquireAsync(
+            link.OrganizationId,
+            subject.Value.Value,
             cancellationToken).ConfigureAwait(false);
 
         Organization? organization = await organizations.GetOrganizationAsync(
@@ -54,7 +66,7 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
         }
 
         OrganizationEnrollmentClaim? existingClaim = await organizations.GetEnrollmentClaimBySubjectAsync(
-            link.Id, command.SubjectId, cancellationToken).ConfigureAwait(false);
+            link.Id, subject.Value.Value, cancellationToken).ConfigureAwait(false);
         if (existingClaim is not null)
         {
             DateTimeOffset observedAtUtc = clock.UtcNow;
@@ -65,14 +77,25 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
             }
 
             return await CreateExistingOutcomeAsync(
-                organization, existingClaim, command.SubjectId, cancellationToken).ConfigureAwait(false);
+                organization, existingClaim, subject.Value.Value, cancellationToken).ConfigureAwait(false);
         }
 
         OrganizationMembership? existingMembership = await organizations.GetMembershipAsync(
-            organization.Id, command.SubjectId, cancellationToken).ConfigureAwait(false);
+            organization.Id, subject.Value.Value, cancellationToken).ConfigureAwait(false);
         if (existingMembership is { Status: OrganizationMembershipState.Active })
         {
             return Result.Failure<OrganizationEnrollmentOutcomeDto>(OrganizationApplicationErrors.MembershipConflict);
+        }
+
+        DateTimeOffset nowUtc = clock.UtcNow;
+        if (await organizations.HasCurrentPendingEnrollmentClaimAsync(
+                organization.Id,
+                subject.Value.Value,
+                nowUtc,
+                cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure<OrganizationEnrollmentOutcomeDto>(
+                OrganizationApplicationErrors.JoinRequestConflict);
         }
 
         bool productReady = await joinAdmissionPolicy.IsAllowedAsync(
@@ -81,8 +104,8 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
                 organization.Id,
                 link.Id,
                 null,
-                command.SubjectId,
-                command.SubjectId,
+                subject.Value.Value,
+                subject.Value.Value,
                 OrganizationMappings.MapMode(link.ApprovalMode)),
             cancellationToken).ConfigureAwait(false);
         if (!productReady)
@@ -91,7 +114,6 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
                 OrganizationApplicationErrors.JoinAdmissionRejected);
         }
 
-        DateTimeOffset nowUtc = clock.UtcNow;
         Result reserved = link.ReserveClaim(command.ActorId, ids.NewId(), nowUtc);
         if (reserved.IsFailure)
         {
@@ -100,11 +122,16 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
 
         if (link.ApprovalMode == DomainApprovalMode.RequiresApproval)
         {
-            return await CreatePendingClaimAsync(link, command, nowUtc, cancellationToken).ConfigureAwait(false);
+            return await CreatePendingClaimAsync(
+                link,
+                subject.Value.Value,
+                command.ActorId,
+                nowUtc,
+                cancellationToken).ConfigureAwait(false);
         }
 
         Result<OrganizationMembership> membership = await OrganizationMemberProvisioning.EnsureActiveMemberAsync(
-            organizations, organization.Id, command.SubjectId, command.ActorId,
+            organizations, existingMembership, organization.Id, subject.Value.Value, command.ActorId,
             nowUtc, ids, cancellationToken).ConfigureAwait(false);
         if (membership.IsFailure)
         {
@@ -112,7 +139,7 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
         }
 
         Result<OrganizationEnrollmentClaim> claim = OrganizationEnrollmentClaim.Create(
-            ids.NewId(), organization.Id, link.Id, command.SubjectId,
+            ids.NewId(), organization.Id, link.Id, subject.Value.Value,
             OrganizationEnrollmentClaimState.Accepted, membership.Value.Id,
             command.ActorId, ids.NewId(), nowUtc);
         if (claim.IsFailure)
@@ -126,14 +153,15 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
 
     private async Task<Result<OrganizationEnrollmentOutcomeDto>> CreatePendingClaimAsync(
         OrganizationEnrollmentLink link,
-        ClaimOrganizationEnrollmentLinkCommand command,
+        string subjectId,
+        string actorId,
         DateTimeOffset nowUtc,
         CancellationToken cancellationToken)
     {
         Result<OrganizationEnrollmentClaim> claim = OrganizationEnrollmentClaim.Create(
-            ids.NewId(), link.OrganizationId, link.Id, command.SubjectId,
+            ids.NewId(), link.OrganizationId, link.Id, subjectId,
             OrganizationEnrollmentClaimState.Pending, null,
-            command.ActorId, ids.NewId(), nowUtc,
+            actorId, ids.NewId(), nowUtc,
             nowUtc.AddHours(options.Value.EnrollmentClaimLifetimeHours));
         if (claim.IsFailure)
         {

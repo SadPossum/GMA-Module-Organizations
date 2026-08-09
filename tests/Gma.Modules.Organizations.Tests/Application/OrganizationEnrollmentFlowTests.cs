@@ -454,6 +454,156 @@ public sealed partial class OrganizationEnrollmentFlowTests
     }
 
     [Fact]
+    public async Task A_pending_request_blocks_another_enrollment_source_without_reserving_capacity()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        using ServiceProvider services = CreateServices(repository, new TestClock(Now));
+        OrganizationEnrollmentLinkIssuedDto firstLink = await IssueAsync(
+            services, repository, OrganizationEnrollmentApprovalMode.RequiresApproval, maximumClaims: 1);
+        OrganizationEnrollmentLinkIssuedDto secondLink = await IssueAsync(
+            services, repository, OrganizationEnrollmentApprovalMode.RequiresApproval, maximumClaims: 1);
+        var claimHandler = services.GetRequiredService<
+            ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>>();
+
+        Result<OrganizationEnrollmentOutcomeDto> first = await claimHandler.HandleAsync(
+            new ClaimOrganizationEnrollmentLinkCommand(firstLink.Token, "member", "user:member"),
+            CancellationToken.None);
+        Result<OrganizationEnrollmentOutcomeDto> competing = await claimHandler.HandleAsync(
+            new ClaimOrganizationEnrollmentLinkCommand(secondLink.Token, "member", "user:member"),
+            CancellationToken.None);
+
+        Assert.True(first.IsSuccess, first.Error.Code);
+        Assert.Equal(OrganizationEnrollmentClaimStatus.Pending, first.Value.Claim.Status);
+        Assert.Equal(OrganizationApplicationErrors.JoinRequestConflict, competing.Error);
+        Assert.Single(repository.EnrollmentClaims);
+        Assert.Equal(
+            1,
+            repository.EnrollmentLinks.Single(
+                item => item.Id == firstLink.EnrollmentLink.EnrollmentLinkId).ReservedClaims);
+        Assert.Equal(
+            0,
+            repository.EnrollmentLinks.Single(
+                item => item.Id == secondLink.EnrollmentLink.EnrollmentLinkId).ReservedClaims);
+    }
+
+    [Fact]
+    public async Task An_overdue_request_does_not_block_a_new_enrollment_source()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        TestClock clock = new(Now);
+        using ServiceProvider services = CreateServices(repository, clock);
+        OrganizationEnrollmentLinkIssuedDto firstLink = await IssueAsync(
+            services, repository, OrganizationEnrollmentApprovalMode.RequiresApproval, maximumClaims: 1);
+        var claimHandler = services.GetRequiredService<
+            ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>>();
+        Result<OrganizationEnrollmentOutcomeDto> first = await claimHandler.HandleAsync(
+            new ClaimOrganizationEnrollmentLinkCommand(firstLink.Token, "member", "user:member"),
+            CancellationToken.None);
+        clock.UtcNow = Now.AddDays(8);
+        OrganizationEnrollmentLinkIssuedDto secondLink = await IssueAsync(
+            services, repository, OrganizationEnrollmentApprovalMode.RequiresApproval, maximumClaims: 1);
+
+        Result<OrganizationEnrollmentOutcomeDto> replacement = await claimHandler.HandleAsync(
+            new ClaimOrganizationEnrollmentLinkCommand(secondLink.Token, "member", "user:member"),
+            CancellationToken.None);
+
+        Assert.True(first.IsSuccess, first.Error.Code);
+        Assert.True(replacement.IsSuccess, replacement.Error.Code);
+        Assert.Equal(2, repository.EnrollmentClaims.Count);
+        Assert.All(
+            repository.EnrollmentClaims,
+            claim => Assert.Equal(
+                Gma.Modules.Organizations.Domain.Enums.OrganizationEnrollmentClaimState.Pending,
+                claim.Status));
+    }
+
+    [Fact]
+    public async Task A_pending_request_blocks_invitation_acceptance_without_consuming_the_invitation()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        using ServiceProvider services = CreateServices(repository, new TestClock(Now));
+        OrganizationEnrollmentLinkIssuedDto link = await IssueAsync(
+            services, repository, OrganizationEnrollmentApprovalMode.RequiresApproval, maximumClaims: 1);
+        var claimHandler = services.GetRequiredService<
+            ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>>();
+        Result<OrganizationEnrollmentOutcomeDto> pending = await claimHandler.HandleAsync(
+            new ClaimOrganizationEnrollmentLinkCommand(link.Token, "member", "user:member"),
+            CancellationToken.None);
+        Organization organization = Assert.Single(repository.Organizations);
+        var issueInvitation = services.GetRequiredService<ICommandHandler<
+            IssueOrganizationInvitationCommand,
+            OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> issued =
+            await issueInvitation.HandleAsync(
+                new IssueOrganizationInvitationCommand(new OrganizationInvitationIssuanceRequest(
+                    Guid.NewGuid(),
+                    organization.Id,
+                    null,
+                    24,
+                    "owner",
+                    "user:owner")),
+                CancellationToken.None);
+        var acceptInvitation = services.GetRequiredService<ICommandHandler<
+            AcceptOrganizationInvitationCommand,
+            OrganizationInvitationAcceptanceDto>>();
+
+        Result<OrganizationInvitationAcceptanceDto> accepted = await acceptInvitation.HandleAsync(
+            new AcceptOrganizationInvitationCommand(
+                Assert.IsType<string>(issued.Value.Token),
+                "member",
+                "user:member"),
+            CancellationToken.None);
+
+        Assert.True(pending.IsSuccess, pending.Error.Code);
+        Assert.Equal(OrganizationApplicationErrors.JoinRequestConflict, accepted.Error);
+        Assert.Equal(
+            Gma.Modules.Organizations.Domain.Enums.OrganizationInvitationState.Pending,
+            Assert.Single(repository.Invitations).Status);
+        Assert.DoesNotContain(repository.Memberships, item => item.SubjectId == "member");
+    }
+
+    [Fact]
+    public async Task Approval_does_not_adopt_a_membership_created_by_another_source()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        using ServiceProvider services = CreateServices(repository, new TestClock(Now));
+        OrganizationEnrollmentLinkIssuedDto link = await IssueAsync(
+            services, repository, OrganizationEnrollmentApprovalMode.RequiresApproval, maximumClaims: 1);
+        var claimHandler = services.GetRequiredService<
+            ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>>();
+        Result<OrganizationEnrollmentOutcomeDto> pending = await claimHandler.HandleAsync(
+            new ClaimOrganizationEnrollmentLinkCommand(link.Token, "member", "user:member"),
+            CancellationToken.None);
+        Organization organization = Assert.Single(repository.Organizations);
+        repository.Memberships.Add(OrganizationMembership.Create(
+            Guid.NewGuid(),
+            organization.Id,
+            "member",
+            DomainMembershipRole.Member,
+            "user:owner",
+            Guid.NewGuid(),
+            Now.AddMinutes(1)).Value);
+        var resolveHandler = services.GetRequiredService<
+            ICommandHandler<ResolveOrganizationJoinRequestCommand, OrganizationEnrollmentOutcomeDto>>();
+
+        Result<OrganizationEnrollmentOutcomeDto> approved = await resolveHandler.HandleAsync(
+            new ResolveOrganizationJoinRequestCommand(
+                organization.Id,
+                pending.Value.Claim.ClaimId,
+                OrganizationJoinRequestDecision.Approve,
+                pending.Value.Claim.Version,
+                "owner",
+                "user:owner"),
+            CancellationToken.None);
+
+        Assert.Equal(OrganizationApplicationErrors.MembershipConflict, approved.Error);
+        Assert.Equal(
+            Gma.Modules.Organizations.Domain.Enums.OrganizationEnrollmentClaimState.Pending,
+            Assert.Single(repository.EnrollmentClaims).Status);
+        Assert.Equal(1, Assert.Single(repository.EnrollmentLinks).ReservedClaims);
+    }
+
+    [Fact]
     public async Task Product_policy_denial_mutates_neither_claim_capacity_nor_membership()
     {
         TestOrganizationRepository repository = CreateRepository();

@@ -83,13 +83,39 @@ internal sealed class TestOrganizationGovernanceCoordinator(
     }
 }
 
+internal sealed class TestOrganizationJoinSubjectCoordinator(
+    Action<Guid, string>? onAcquire = null) : IOrganizationJoinSubjectCoordinator
+{
+    private readonly Lock sync = new();
+
+    public List<(Guid OrganizationId, string SubjectId)> Acquisitions { get; } = [];
+
+    public Task AcquireAsync(
+        Guid organizationId,
+        string subjectId,
+        CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        lock (this.sync)
+        {
+            this.Acquisitions.Add((organizationId, subjectId));
+        }
+
+        onAcquire?.Invoke(organizationId, subjectId);
+        return Task.CompletedTask;
+    }
+}
+
 internal static class TestOrganizationGovernanceRegistration
 {
     public static IServiceCollection AddTestOrganizationGovernance(
-        this IServiceCollection services)
+        this IServiceCollection services,
+        TestOrganizationJoinSubjectCoordinator? joinSubjects = null)
     {
         services.AddSingleton<IOrganizationGovernanceCoordinator>(
             new TestOrganizationGovernanceCoordinator());
+        services.AddSingleton<IOrganizationJoinSubjectCoordinator>(
+            joinSubjects ?? new TestOrganizationJoinSubjectCoordinator());
         return services;
     }
 }

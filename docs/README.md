@@ -44,6 +44,8 @@ Replacement-source lifecycle consistency is tracked in
 [Organizations Lifecycle Consistency Task](organizations-lifecycle-consistency-task.md).
 Transaction-stable lifecycle and membership authorization is tracked in
 [Organizations Governance Transaction Consistency Task](organizations-governance-transaction-consistency-task.md).
+Single-winner coordination across invitation and enrollment paths is tracked in
+[Organizations Join-Subject Consistency Task](organizations-join-subject-consistency-task.md).
 
 The bounded application-port filter for offline workflows that already hold a
 candidate set is tracked in
@@ -126,6 +128,12 @@ fence; lifecycle, ownership, role, and membership-state changes take it
 exclusively. This preserves concurrency between organizations and ordinary
 operations while ensuring a command commits before a governance change or
 re-authorizes against the change after it commits.
+
+Membership-creating invitation and enrollment paths additionally use a
+per-organization, per-subject transaction fence. An exact source replay remains
+idempotent, while one current pending enrollment request wins over competing
+links or invitation acceptance without consuming another source or reserving
+more capacity. Unrelated subjects continue concurrently.
 
 Self-service organization creation requires a caller-owned non-empty operation
 id. Keep that id for retries of the same normalized name and slug; exact

@@ -11,11 +11,13 @@ using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
+using Gma.Modules.Organizations.Domain.ValueObjects;
 using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipRole;
 
 internal sealed class AcceptOrganizationInvitationCommandHandler(
     IOrganizationRepository organizations,
     IOrganizationGovernanceCoordinator governance,
+    IOrganizationJoinSubjectCoordinator joinSubjects,
     IOrganizationInvitationTokenService tokens,
     IOrganizationInvitationAdmissionPolicy admissionPolicy,
     OrganizationJoinAdmissionPolicy joinAdmissionPolicy,
@@ -42,8 +44,18 @@ internal sealed class AcceptOrganizationInvitationCommandHandler(
                 OrganizationApplicationErrors.InvitationTokenInvalid);
         }
 
+        Result<OrganizationSubjectId> subject = OrganizationSubjectId.Create(command.SubjectId);
+        if (subject.IsFailure)
+        {
+            return Result.Failure<OrganizationInvitationAcceptanceDto>(subject.Error);
+        }
+
         await governance.AcquireSharedAsync(
             invitation.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
+        await joinSubjects.AcquireAsync(
+            invitation.OrganizationId,
+            subject.Value.Value,
             cancellationToken).ConfigureAwait(false);
 
         Organization? organization = await organizations
@@ -56,25 +68,46 @@ internal sealed class AcceptOrganizationInvitationCommandHandler(
                 Gma.Modules.Organizations.Domain.Errors.OrganizationDomainErrors.OrganizationNotActive);
         }
 
-        Result admission = await admissionPolicy.CanAcceptInvitationAsync(
-            command.SubjectId, invitation.RecipientEmail, cancellationToken).ConfigureAwait(false);
-        if (admission.IsFailure)
-        {
-            return Result.Failure<OrganizationInvitationAcceptanceDto>(admission.Error);
-        }
-
         OrganizationMembership? membership = await organizations.GetMembershipAsync(
-            organization.Id, command.SubjectId, cancellationToken).ConfigureAwait(false);
+            organization.Id, subject.Value.Value, cancellationToken).ConfigureAwait(false);
+        DateTimeOffset nowUtc = clock.UtcNow;
         if (invitation.Status == OrganizationInvitationState.Accepted)
         {
-            return CreateIdempotentResult(invitation, organization, membership, command.SubjectId, clock.UtcNow);
+            return CreateIdempotentResult(
+                invitation,
+                organization,
+                membership,
+                subject.Value.Value,
+                nowUtc);
         }
 
-        DateTimeOffset nowUtc = clock.UtcNow;
-        Result acceptable = invitation.EnsureAcceptable(command.SubjectId, nowUtc);
+        if (membership is { Status: OrganizationMembershipState.Active })
+        {
+            return Result.Failure<OrganizationInvitationAcceptanceDto>(
+                OrganizationApplicationErrors.MembershipConflict);
+        }
+
+        if (await organizations.HasCurrentPendingEnrollmentClaimAsync(
+                organization.Id,
+                subject.Value.Value,
+                nowUtc,
+                cancellationToken).ConfigureAwait(false))
+        {
+            return Result.Failure<OrganizationInvitationAcceptanceDto>(
+                OrganizationApplicationErrors.JoinRequestConflict);
+        }
+
+        Result acceptable = invitation.EnsureAcceptable(subject.Value.Value, nowUtc);
         if (acceptable.IsFailure)
         {
             return Result.Failure<OrganizationInvitationAcceptanceDto>(acceptable.Error);
+        }
+
+        Result admission = await admissionPolicy.CanAcceptInvitationAsync(
+            subject.Value.Value, invitation.RecipientEmail, cancellationToken).ConfigureAwait(false);
+        if (admission.IsFailure)
+        {
+            return Result.Failure<OrganizationInvitationAcceptanceDto>(admission.Error);
         }
 
         bool productReady = await joinAdmissionPolicy.IsAllowedAsync(
@@ -83,8 +116,8 @@ internal sealed class AcceptOrganizationInvitationCommandHandler(
                 organization.Id,
                 invitation.Id,
                 null,
-                command.SubjectId,
-                command.SubjectId,
+                subject.Value.Value,
+                subject.Value.Value,
                 null),
             cancellationToken).ConfigureAwait(false);
         if (!productReady)
@@ -96,7 +129,7 @@ internal sealed class AcceptOrganizationInvitationCommandHandler(
         if (membership is null)
         {
             Result<OrganizationMembership> created = OrganizationMembership.Create(
-                ids.NewId(), organization.Id, command.SubjectId, DomainMembershipRole.Member,
+                ids.NewId(), organization.Id, subject.Value.Value, DomainMembershipRole.Member,
                 command.ActorId, ids.NewId(), nowUtc);
             if (created.IsFailure)
             {
@@ -117,7 +150,7 @@ internal sealed class AcceptOrganizationInvitationCommandHandler(
         }
 
         Result accepted = invitation.Accept(
-            command.SubjectId, membership.Id, command.ActorId, ids.NewId(), nowUtc);
+            subject.Value.Value, membership.Id, command.ActorId, ids.NewId(), nowUtc);
         return accepted.IsSuccess
             ? Result.Success(ToAcceptance(invitation, organization, membership, nowUtc))
             : Result.Failure<OrganizationInvitationAcceptanceDto>(accepted.Error);

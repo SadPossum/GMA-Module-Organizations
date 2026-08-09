@@ -85,6 +85,9 @@ public static class DependencyInjection
             IOrganizationGovernanceCoordinator,
             OrganizationGovernanceCoordinator>();
         builder.Services.TryAddScoped<
+            IOrganizationJoinSubjectCoordinator,
+            OrganizationJoinSubjectCoordinator>();
+        builder.Services.TryAddScoped<
             IOrganizationCreationCoordinator,
             OrganizationCreationCoordinator>();
         builder.Services.TryAddScoped<

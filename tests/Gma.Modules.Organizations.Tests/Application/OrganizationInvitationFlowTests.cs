@@ -249,6 +249,38 @@ public sealed class OrganizationInvitationFlowTests
     }
 
     [Fact]
+    public async Task A_fresh_invitation_does_not_emit_another_acceptance_for_an_active_member()
+    {
+        TestRepository repository = CreateRepository();
+        TestClock clock = new();
+        using ServiceProvider services = CreateServices(repository, clock);
+        Organization organization = Assert.Single(repository.Organizations);
+        repository.Memberships.Add(OrganizationMembership.Create(
+            Guid.NewGuid(),
+            organization.Id,
+            "member",
+            DomainMembershipRole.Member,
+            "user:owner",
+            Guid.NewGuid(),
+            Now).Value);
+        OrganizationInvitationIssuedDto issued = await IssueAsync(
+            services, organization, null, 24);
+        var accept = services.GetRequiredService<
+            ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>>();
+
+        Result<OrganizationInvitationAcceptanceDto> result = await accept.HandleAsync(
+            new AcceptOrganizationInvitationCommand(
+                issued.Token,
+                "member",
+                "user:member"),
+            CancellationToken.None);
+
+        Assert.Equal(OrganizationApplicationErrors.MembershipConflict, result.Error);
+        Assert.Equal(DomainInvitationState.Pending, Assert.Single(repository.Invitations).Status);
+        Assert.Single(repository.Memberships, membership => membership.SubjectId == "member");
+    }
+
+    [Fact]
     public async Task Bound_invitation_fails_closed_without_recipient_verification_extension()
     {
         TestRepository repository = CreateRepository();
@@ -509,6 +541,7 @@ public sealed class OrganizationInvitationFlowTests
         public Task<OrganizationEnrollmentLink?> GetEnrollmentLinkByDigestAsync(string tokenDigest, CancellationToken cancellationToken) => Task.FromResult<OrganizationEnrollmentLink?>(null);
         public Task<OrganizationEnrollmentClaim?> GetEnrollmentClaimAsync(Guid organizationId, Guid claimId, CancellationToken cancellationToken) => Task.FromResult<OrganizationEnrollmentClaim?>(null);
         public Task<OrganizationEnrollmentClaim?> GetEnrollmentClaimBySubjectAsync(Guid enrollmentLinkId, string subjectId, CancellationToken cancellationToken) => Task.FromResult<OrganizationEnrollmentClaim?>(null);
+        public Task<bool> HasCurrentPendingEnrollmentClaimAsync(Guid organizationId, string subjectId, DateTimeOffset nowUtc, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<bool> SlugExistsAsync(string slug, Guid? excludingOrganizationId, CancellationToken cancellationToken) => Task.FromResult(false);
         public Task<bool> MembershipExistsAsync(Guid organizationId, string subjectId, CancellationToken cancellationToken) =>
             Task.FromResult(this.Memberships.Any(item => item.OrganizationId == organizationId && item.SubjectId == subjectId));
