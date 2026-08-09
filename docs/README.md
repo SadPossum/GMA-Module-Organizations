@@ -52,6 +52,8 @@ Applicant-owned withdrawal of pending approval requests is tracked in
 [Organizations Join-Request Withdrawal Task](organizations-join-request-withdrawal-task.md).
 Retry safety for the three-aggregate ownership handoff is tracked in
 [Organizations Ownership Transfer Retry Safety Task](organizations-ownership-transfer-retry-safety-task.md).
+Truthful bounded continuation across Organizations directories is tracked in
+[Organizations Truthful Pagination Task](organizations-truthful-pagination-task.md).
 Cross-provider ordinal storage for case-preserving subject and actor identifiers
 is tracked in
 [Organizations Ordinal Identity Storage Task](organizations-ordinal-identity-storage-task.md).

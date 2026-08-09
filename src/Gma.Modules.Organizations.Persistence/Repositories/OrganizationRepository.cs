@@ -142,15 +142,16 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
             orderby organization.Name, organization.Id
             select new { Organization = organization, Membership = membership })
             .Skip(pageRequest.SkipCount)
-            .Take(pageRequest.PageSize)
+            .Take(pageRequest.PageSize + 1)
             .ToListAsync(cancellationToken)
             .ConfigureAwait(false);
 
         return new OrganizationListResponse(
-            rows.Select(row => new OrganizationMembershipSummaryDto(
+            rows.Take(pageRequest.PageSize).Select(row => new OrganizationMembershipSummaryDto(
                 row.Organization.ToDto(), row.Membership.ToDto())).ToArray(),
             pageRequest.Page,
-            pageRequest.PageSize);
+            pageRequest.PageSize,
+            rows.Count > pageRequest.PageSize);
     }
 
     public async Task<OrganizationCatalogListResponse> ListCatalogAsync(
@@ -162,13 +163,14 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
             .OrderBy(organization => organization.Name)
             .ThenBy(organization => organization.Id)
             .Skip(pageRequest.SkipCount)
-            .Take(pageRequest.PageSize)
+            .Take(pageRequest.PageSize + 1)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
         return new OrganizationCatalogListResponse(
-            organizations.Select(organization => organization.ToDto()).ToArray(),
+            organizations.Take(pageRequest.PageSize).Select(organization => organization.ToDto()).ToArray(),
             pageRequest.Page,
-            pageRequest.PageSize);
+            pageRequest.PageSize,
+            organizations.Length > pageRequest.PageSize);
     }
 
     public async Task<OrganizationMemberListResponse> ListMembersAsync(
@@ -183,7 +185,7 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
             .OrderByDescending(membership => membership.Role)
             .ThenBy(membership => membership.SubjectId)
             .Skip(pageRequest.SkipCount)
-            .Take(pageRequest.PageSize)
+            .Take(pageRequest.PageSize + 1)
             .Select(membership => new OrganizationMembershipDto(
                 membership.Id,
                 membership.OrganizationId,
@@ -196,7 +198,11 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
 
-        return new OrganizationMemberListResponse(members, pageRequest.Page, pageRequest.PageSize);
+        return new OrganizationMemberListResponse(
+            members.Take(pageRequest.PageSize).ToArray(),
+            pageRequest.Page,
+            pageRequest.PageSize,
+            members.Length > pageRequest.PageSize);
     }
 
     public async Task<OrganizationInvitationListResponse> ListInvitationsAsync(
@@ -211,13 +217,14 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
             .OrderByDescending(invitation => invitation.CreatedAtUtc)
             .ThenBy(invitation => invitation.Id)
             .Skip(pageRequest.SkipCount)
-            .Take(pageRequest.PageSize)
+            .Take(pageRequest.PageSize + 1)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
         return new OrganizationInvitationListResponse(
-            invitations.Select(invitation => invitation.ToDto(nowUtc)).ToArray(),
+            invitations.Take(pageRequest.PageSize).Select(invitation => invitation.ToDto(nowUtc)).ToArray(),
             pageRequest.Page,
-            pageRequest.PageSize);
+            pageRequest.PageSize,
+            invitations.Length > pageRequest.PageSize);
     }
 
     public async Task<OrganizationEnrollmentLinkListResponse> ListEnrollmentLinksAsync(
@@ -232,13 +239,14 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
             .OrderByDescending(link => link.CreatedAtUtc)
             .ThenBy(link => link.Id)
             .Skip(pageRequest.SkipCount)
-            .Take(pageRequest.PageSize)
+            .Take(pageRequest.PageSize + 1)
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
         return new OrganizationEnrollmentLinkListResponse(
-            links.Select(link => link.ToDto(nowUtc)).ToArray(),
+            links.Take(pageRequest.PageSize).Select(link => link.ToDto(nowUtc)).ToArray(),
             pageRequest.Page,
-            pageRequest.PageSize);
+            pageRequest.PageSize,
+            links.Length > pageRequest.PageSize);
     }
 
     public async Task<OrganizationJoinRequestListResponse> ListPendingJoinRequestsAsync(
@@ -255,7 +263,7 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
             .OrderBy(claim => claim.CreatedAtUtc)
             .ThenBy(claim => claim.Id)
             .Skip(pageRequest.SkipCount)
-            .Take(pageRequest.PageSize)
+            .Take(pageRequest.PageSize + 1)
             .Select(claim => new OrganizationEnrollmentClaimDto(
                 claim.Id, claim.EnrollmentLinkId, claim.OrganizationId, claim.SubjectId,
                 OrganizationEnrollmentClaimStatus.Pending, claim.MembershipId,
@@ -266,9 +274,10 @@ internal sealed class OrganizationRepository(OrganizationsDbContext dbContext) :
             .ToArrayAsync(cancellationToken)
             .ConfigureAwait(false);
         return new OrganizationJoinRequestListResponse(
-            claims,
+            claims.Take(pageRequest.PageSize).ToArray(),
             pageRequest.Page,
-            pageRequest.PageSize);
+            pageRequest.PageSize,
+            claims.Length > pageRequest.PageSize);
     }
 
     public async Task AddOrganizationAsync(Organization organization, CancellationToken cancellationToken) =>

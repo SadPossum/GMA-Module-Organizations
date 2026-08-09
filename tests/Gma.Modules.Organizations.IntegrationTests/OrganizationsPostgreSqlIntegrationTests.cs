@@ -72,13 +72,20 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
         await dbContext.SaveChangesAsync();
         OrganizationRepository repository = new(dbContext);
 
-        var discovered = await repository.ListForSubjectAsync(
-            "subject-a", PageRequest.Normalize(1, 25), CancellationToken.None);
+        var firstPage = await repository.ListForSubjectAsync(
+            "subject-a", PageRequest.Normalize(1, 1), CancellationToken.None);
+        var lastPage = await repository.ListForSubjectAsync(
+            "subject-a", PageRequest.Normalize(2, 1), CancellationToken.None);
         OrganizationMembership? scoped = await repository.GetMembershipAsync(
             first.Id, "subject-b", CancellationToken.None);
 
-        Assert.Equal(2, discovered.Items.Count);
-        Assert.All(discovered.Items, item => Assert.Equal("subject-a", item.Membership.SubjectId));
+        Assert.Single(firstPage.Items);
+        Assert.True(firstPage.HasMore);
+        Assert.Single(lastPage.Items);
+        Assert.False(lastPage.HasMore);
+        Assert.All(
+            firstPage.Items.Concat(lastPage.Items),
+            item => Assert.Equal("subject-a", item.Membership.SubjectId));
         Assert.Null(scoped);
     }
 

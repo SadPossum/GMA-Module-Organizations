@@ -35,6 +35,98 @@ public sealed class OrganizationRepositoryTests
     }
 
     [Fact]
+    public async Task Every_directory_reports_bounded_lookahead_without_returning_the_extra_row()
+    {
+        await using OrganizationsDbContext dbContext = CreateDbContext();
+        Organization first = CreateOrganization("First House", "first-house");
+        Organization second = CreateOrganization("Second House", "second-house");
+        OrganizationMembership firstMembership = CreateMembership(first.Id, "subject-a");
+        OrganizationMembership secondMembership = CreateMembership(second.Id, "subject-a");
+        OrganizationMembership colleague = CreateMembership(first.Id, "subject-b");
+        OrganizationInvitation firstInvitation = CreateInvitation(first.Id, 'a');
+        OrganizationInvitation secondInvitation = CreateInvitation(first.Id, 'b');
+        OrganizationEnrollmentLink firstLink = CreateEnrollmentLink(first.Id, 'c');
+        OrganizationEnrollmentLink secondLink = CreateEnrollmentLink(first.Id, 'd');
+        OrganizationEnrollmentClaim firstClaim = CreatePendingClaim(
+            first.Id, firstLink.Id, "claim-a", Now, Now.AddDays(1));
+        OrganizationEnrollmentClaim secondClaim = CreatePendingClaim(
+            first.Id, firstLink.Id, "claim-b", Now.AddMinutes(1), Now.AddDays(1));
+        dbContext.AddRange(
+            first,
+            second,
+            firstMembership,
+            secondMembership,
+            colleague,
+            firstInvitation,
+            secondInvitation,
+            firstLink,
+            secondLink,
+            firstClaim,
+            secondClaim);
+        await dbContext.SaveChangesAsync();
+        OrganizationRepository repository = new(dbContext);
+        PageRequest firstPage = PageRequest.Normalize(1, 1);
+        PageRequest secondPage = PageRequest.Normalize(2, 1);
+        PageRequest emptyPage = PageRequest.Normalize(3, 1);
+
+        var organizationsFirst = await repository.ListForSubjectAsync(
+            "subject-a", firstPage, CancellationToken.None);
+        var organizationsLast = await repository.ListForSubjectAsync(
+            "subject-a", secondPage, CancellationToken.None);
+        var organizationsEmpty = await repository.ListForSubjectAsync(
+            "subject-a", emptyPage, CancellationToken.None);
+        var catalogFirst = await repository.ListCatalogAsync(firstPage, CancellationToken.None);
+        var catalogLast = await repository.ListCatalogAsync(secondPage, CancellationToken.None);
+        var catalogEmpty = await repository.ListCatalogAsync(emptyPage, CancellationToken.None);
+        var membersFirst = await repository.ListMembersAsync(first.Id, firstPage, CancellationToken.None);
+        var membersLast = await repository.ListMembersAsync(first.Id, secondPage, CancellationToken.None);
+        var membersEmpty = await repository.ListMembersAsync(first.Id, emptyPage, CancellationToken.None);
+        var invitationsFirst = await repository.ListInvitationsAsync(
+            first.Id, firstPage, Now, CancellationToken.None);
+        var invitationsLast = await repository.ListInvitationsAsync(
+            first.Id, secondPage, Now, CancellationToken.None);
+        var invitationsEmpty = await repository.ListInvitationsAsync(
+            first.Id, emptyPage, Now, CancellationToken.None);
+        var linksFirst = await repository.ListEnrollmentLinksAsync(
+            first.Id, firstPage, Now, CancellationToken.None);
+        var linksLast = await repository.ListEnrollmentLinksAsync(
+            first.Id, secondPage, Now, CancellationToken.None);
+        var linksEmpty = await repository.ListEnrollmentLinksAsync(
+            first.Id, emptyPage, Now, CancellationToken.None);
+        var claimsFirst = await repository.ListPendingJoinRequestsAsync(
+            first.Id, firstPage, Now, CancellationToken.None);
+        var claimsLast = await repository.ListPendingJoinRequestsAsync(
+            first.Id, secondPage, Now, CancellationToken.None);
+        var claimsEmpty = await repository.ListPendingJoinRequestsAsync(
+            first.Id, emptyPage, Now, CancellationToken.None);
+
+        AssertContinuation(
+            organizationsFirst.Items, organizationsFirst.HasMore,
+            organizationsLast.Items, organizationsLast.HasMore,
+            organizationsEmpty.Items, organizationsEmpty.HasMore);
+        AssertContinuation(
+            catalogFirst.Items, catalogFirst.HasMore,
+            catalogLast.Items, catalogLast.HasMore,
+            catalogEmpty.Items, catalogEmpty.HasMore);
+        AssertContinuation(
+            membersFirst.Items, membersFirst.HasMore,
+            membersLast.Items, membersLast.HasMore,
+            membersEmpty.Items, membersEmpty.HasMore);
+        AssertContinuation(
+            invitationsFirst.Items, invitationsFirst.HasMore,
+            invitationsLast.Items, invitationsLast.HasMore,
+            invitationsEmpty.Items, invitationsEmpty.HasMore);
+        AssertContinuation(
+            linksFirst.Items, linksFirst.HasMore,
+            linksLast.Items, linksLast.HasMore,
+            linksEmpty.Items, linksEmpty.HasMore);
+        AssertContinuation(
+            claimsFirst.Items, claimsFirst.HasMore,
+            claimsLast.Items, claimsLast.HasMore,
+            claimsEmpty.Items, claimsEmpty.HasMore);
+    }
+
+    [Fact]
     public void Membership_model_has_one_unique_organization_subject_index()
     {
         using OrganizationsDbContext dbContext = CreateDbContext();
@@ -215,6 +307,33 @@ public sealed class OrganizationRepositoryTests
         OrganizationMembership.Create(
             Guid.NewGuid(), organizationId, subjectId, OrganizationMembershipRole.Member,
             "user:owner", Guid.NewGuid(), Now).Value;
+
+    private static OrganizationInvitation CreateInvitation(Guid organizationId, char digestCharacter) =>
+        OrganizationInvitation.Create(
+            Guid.NewGuid(), organizationId, "owner", null, new string(digestCharacter, 64),
+            Now.AddDays(1), "user:owner", Guid.NewGuid(), Now).Value;
+
+    private static OrganizationEnrollmentLink CreateEnrollmentLink(Guid organizationId, char digestCharacter) =>
+        OrganizationEnrollmentLink.Create(
+            Guid.NewGuid(), organizationId, "owner", new string(digestCharacter, 64),
+            Now.AddDays(1), 10, OrganizationEnrollmentApprovalMode.RequiresApproval,
+            "user:owner", Guid.NewGuid(), Now).Value;
+
+    private static void AssertContinuation<T>(
+        IReadOnlyList<T> firstItems,
+        bool firstHasMore,
+        IReadOnlyList<T> lastItems,
+        bool lastHasMore,
+        IReadOnlyList<T> emptyItems,
+        bool emptyHasMore)
+    {
+        Assert.Single(firstItems);
+        Assert.True(firstHasMore);
+        Assert.Single(lastItems);
+        Assert.False(lastHasMore);
+        Assert.Empty(emptyItems);
+        Assert.False(emptyHasMore);
+    }
 
     private static OrganizationEnrollmentClaim CreatePendingClaim(
         Guid organizationId,
