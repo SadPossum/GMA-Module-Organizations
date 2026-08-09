@@ -16,6 +16,7 @@ using Microsoft.Extensions.Options;
 
 internal sealed class RotateOrganizationEnrollmentLinkCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationGovernanceCoordinator governance,
     IOrganizationJoinSourceIssuanceCoordinator issuance,
     OrganizationJoinSourceAuthorization joinSourceAuthorization,
     OrganizationMutationAdmissionPolicy mutationAdmission,
@@ -51,6 +52,10 @@ internal sealed class RotateOrganizationEnrollmentLinkCommandHandler(
                 subject.IsFailure ? subject.Error :
                 actor.IsFailure ? actor.Error : lifetime.Error);
         }
+
+        await governance.AcquireSharedAsync(
+            command.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
 
         Result authorized = await joinSourceAuthorization.AuthorizeAsync(
             new OrganizationJoinSourceAuthorizationContext(

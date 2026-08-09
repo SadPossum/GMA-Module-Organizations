@@ -42,6 +42,8 @@ Concurrent issuance and caller-owned HTTP retry semantics are tracked in
 [Organizations Join Source Retry Safety Task](organizations-join-source-retry-safety-task.md).
 Replacement-source lifecycle consistency is tracked in
 [Organizations Lifecycle Consistency Task](organizations-lifecycle-consistency-task.md).
+Transaction-stable lifecycle and membership authorization is tracked in
+[Organizations Governance Transaction Consistency Task](organizations-governance-transaction-consistency-task.md).
 
 The bounded application-port filter for offline workflows that already hold a
 candidate set is tracked in
@@ -117,6 +119,13 @@ Recipient-bound invitations fail closed unless a host or extension replaces `IOr
 ## Operations
 
 Token plaintext is returned once at issuance; only purpose-separated SHA-256 digests are persisted. All mutable aggregates carry optimistic versions, persistence uses a durable outbox, and PostgreSQL container tests prove bounded-claim concurrency and organization/subject isolation.
+
+Transactional mutations that rely on organization lifecycle or membership
+authority use a per-organization governance fence. Ordinary work shares the
+fence; lifecycle, ownership, role, and membership-state changes take it
+exclusively. This preserves concurrency between organizations and ordinary
+operations while ensuring a command commits before a governance change or
+re-authorizes against the change after it commits.
 
 Self-service organization creation requires a caller-owned non-empty operation
 id. Keep that id for retries of the same normalized name and slug; exact

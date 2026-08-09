@@ -45,6 +45,108 @@ foreach ($sourceFile in $sourceFiles) {
     }
 }
 
+$commandHandlerDirectory = Join-Path $repositoryRoot 'src/Gma.Modules.Organizations.Application/Handlers'
+$commandHandlers = @(Get-ChildItem -LiteralPath $commandHandlerDirectory -Filter '*CommandHandler.cs' -File)
+$sharedGovernanceHandlers = @(
+    'AcceptOrganizationInvitationCommandHandler',
+    'ClaimOrganizationEnrollmentLinkCommandHandler',
+    'DisableOrganizationEnrollmentLinkCommandHandler',
+    'IssueOrganizationEnrollmentLinkCommandHandler',
+    'IssueOrganizationInvitationCommandHandler',
+    'ReissueOrganizationInvitationCommandHandler',
+    'ResolveOrganizationJoinRequestCommandHandler',
+    'RevokeOrganizationInvitationCommandHandler',
+    'RotateOrganizationEnrollmentLinkCommandHandler',
+    'UpdateOrganizationCommandHandler'
+)
+$exclusiveGovernanceHandlers = @(
+    'ChangeOrganizationLifecycleCommandHandler',
+    'ChangeOrganizationLifecycleForAdministrationCommandHandler',
+    'ChangeOrganizationMembershipCommandHandler',
+    'EnsureOrganizationMembershipStateCommandHandler',
+    'EnsureOrganizationOwnerForAdministrationCommandHandler',
+    'TransferOrganizationOwnershipCommandHandler'
+)
+$uncoordinatedHandlers = @(
+    'CreateOrganizationCommandHandler',
+    'ExpireOrganizationEnrollmentClaimsCommandHandler',
+    'ExpireOrganizationEnrollmentLinksCommandHandler',
+    'ExpireOrganizationInvitationsCommandHandler'
+)
+$classifiedHandlers = @(
+    $sharedGovernanceHandlers
+    $exclusiveGovernanceHandlers
+    $uncoordinatedHandlers
+)
+
+foreach ($duplicate in @($classifiedHandlers | Group-Object | Where-Object Count -gt 1)) {
+    $errors.Add("Command handler '$($duplicate.Name)' has more than one governance classification.")
+}
+
+foreach ($handler in $commandHandlers) {
+    if ($handler.BaseName -notin $classifiedHandlers) {
+        $errors.Add("$($handler.Name) has no explicit governance coordination classification.")
+    }
+}
+
+foreach ($handlerName in $classifiedHandlers) {
+    $handler = $commandHandlers | Where-Object BaseName -eq $handlerName
+    if ($null -eq $handler) {
+        $errors.Add("Governance coordination classifies missing command handler '$handlerName'.")
+        continue
+    }
+
+    $source = Get-Content -LiteralPath $handler.FullName -Raw
+    $sharedCount = [regex]::Matches($source, 'governance\.AcquireSharedAsync\(').Count
+    $exclusiveCount = [regex]::Matches($source, 'governance\.AcquireExclusiveAsync\(').Count
+    if ($handlerName -in $sharedGovernanceHandlers -and
+        ($sharedCount -ne 1 -or $exclusiveCount -ne 0)) {
+        $errors.Add("$($handler.Name) must acquire shared governance exactly once.")
+    }
+    elseif ($handlerName -in $exclusiveGovernanceHandlers -and
+        ($exclusiveCount -ne 1 -or $sharedCount -ne 0)) {
+        $errors.Add("$($handler.Name) must acquire exclusive governance exactly once.")
+    }
+    elseif ($handlerName -in $uncoordinatedHandlers -and
+        ($sharedCount -ne 0 -or $exclusiveCount -ne 0)) {
+        $errors.Add("$($handler.Name) is classified as intentionally uncoordinated but acquires governance.")
+    }
+
+    if ($handlerName -in $sharedGovernanceHandlers -or
+        $handlerName -in $exclusiveGovernanceHandlers) {
+        $commandName = $handlerName -replace 'Handler$', ''
+        $commandFile = Join-Path $repositoryRoot "src/Gma.Modules.Organizations.Application/Commands/$commandName.cs"
+        if (-not (Test-Path -LiteralPath $commandFile)) {
+            $errors.Add("$($handler.Name) has no matching transactional command source '$commandName.cs'.")
+        }
+        else {
+            $commandSource = Get-Content -LiteralPath $commandFile -Raw
+            if ($commandSource -notmatch 'ITransactionalCommand\s*<') {
+                $errors.Add("$commandName must remain transactional while it acquires governance.")
+            }
+        }
+
+        $acquisitionMatch = [regex]::Match(
+            $source,
+            'governance\.Acquire(?:Shared|Exclusive)Async\(')
+        $protectedReadMatch = [regex]::Match(
+            $source,
+            'OrganizationMembershipAuthorization\.Require|joinSourceAuthorization\.AuthorizeAsync|organizations\s*\.\s*Get(?:Organization|Membership)Async')
+        if ($protectedReadMatch.Success -and
+            $acquisitionMatch.Index -gt $protectedReadMatch.Index) {
+            $errors.Add("$($handler.Name) reads governance before acquiring its transaction lock.")
+        }
+
+        $sourceLockMatch = [regex]::Match(
+            $source,
+            'issuance\.Acquire(?:Invitation|EnrollmentLink|Replacement)Async')
+        if ($sourceLockMatch.Success -and
+            $acquisitionMatch.Index -gt $sourceLockMatch.Index) {
+            $errors.Add("$($handler.Name) acquires a join-source lock before organization governance.")
+        }
+    }
+}
+
 if ($errors.Count -gt 0) {
     throw "Organizations boundary checks failed:`n - $($errors -join "`n - ")"
 }

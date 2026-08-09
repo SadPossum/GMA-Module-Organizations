@@ -15,6 +15,7 @@ using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.Organization
 
 internal sealed class AcceptOrganizationInvitationCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationGovernanceCoordinator governance,
     IOrganizationInvitationTokenService tokens,
     IOrganizationInvitationAdmissionPolicy admissionPolicy,
     OrganizationJoinAdmissionPolicy joinAdmissionPolicy,
@@ -40,6 +41,10 @@ internal sealed class AcceptOrganizationInvitationCommandHandler(
             return Result.Failure<OrganizationInvitationAcceptanceDto>(
                 OrganizationApplicationErrors.InvitationTokenInvalid);
         }
+
+        await governance.AcquireSharedAsync(
+            invitation.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
 
         Organization? organization = await organizations
             .GetOrganizationAsync(invitation.OrganizationId, cancellationToken)

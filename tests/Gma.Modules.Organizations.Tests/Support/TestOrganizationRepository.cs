@@ -19,13 +19,18 @@ internal sealed class TestOrganizationRepository(
     public int MembershipReadCount { get; private set; }
     public int InvitationReadCount { get; private set; }
     public int EnrollmentLinkReadCount { get; private set; }
+    public Action? OnGovernanceRead { get; set; }
 
-    public Task<Organization?> GetOrganizationAsync(Guid organizationId, CancellationToken cancellationToken) =>
-        Task.FromResult(this.Organizations.SingleOrDefault(item => item.Id == organizationId));
+    public Task<Organization?> GetOrganizationAsync(Guid organizationId, CancellationToken cancellationToken)
+    {
+        this.OnGovernanceRead?.Invoke();
+        return Task.FromResult(this.Organizations.SingleOrDefault(item => item.Id == organizationId));
+    }
 
     public Task<OrganizationMembership?> GetMembershipAsync(
         Guid organizationId, string subjectId, CancellationToken cancellationToken)
     {
+        this.OnGovernanceRead?.Invoke();
         this.MembershipReadCount++;
         return Task.FromResult(this.Memberships.SingleOrDefault(item =>
             item.OrganizationId == organizationId && item.SubjectId == subjectId.Trim()));

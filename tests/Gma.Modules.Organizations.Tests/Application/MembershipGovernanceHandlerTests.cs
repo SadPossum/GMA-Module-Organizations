@@ -11,6 +11,7 @@ using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipRole;
 using Gma.Modules.Organizations.Domain.Errors;
+using Gma.Modules.Organizations.Tests.Support;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -172,6 +173,7 @@ public sealed class MembershipGovernanceHandlerTests
         IConfiguration configuration = new ConfigurationBuilder().Build();
         ServiceCollection services = new();
         services.AddOrganizationsApplication(configuration);
+        services.AddTestOrganizationGovernance();
         services.AddSingleton<IOrganizationRepository>(repository);
         services.AddSingleton<ISystemClock>(new TestClock());
         services.AddSingleton<IIdGenerator>(new TestIds());

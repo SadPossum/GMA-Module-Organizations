@@ -82,6 +82,9 @@ public static class DependencyInjection
             OrganizationEnrollmentClaimInspector>();
         builder.Services.TryAddScoped<IOrganizationRepository, OrganizationRepository>();
         builder.Services.TryAddScoped<
+            IOrganizationGovernanceCoordinator,
+            OrganizationGovernanceCoordinator>();
+        builder.Services.TryAddScoped<
             IOrganizationCreationCoordinator,
             OrganizationCreationCoordinator>();
         builder.Services.TryAddScoped<

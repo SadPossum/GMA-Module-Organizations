@@ -13,6 +13,7 @@ using Gma.Modules.Organizations.Domain.Aggregates;
 
 internal sealed class DisableOrganizationEnrollmentLinkCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationGovernanceCoordinator governance,
     OrganizationJoinSourceAuthorization joinSourceAuthorization,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<
@@ -23,6 +24,10 @@ internal sealed class DisableOrganizationEnrollmentLinkCommandHandler(
         DisableOrganizationEnrollmentLinkCommand command,
         CancellationToken cancellationToken)
     {
+        await governance.AcquireSharedAsync(
+            command.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
+
         Result authorized = await joinSourceAuthorization.AuthorizeAsync(
             new OrganizationJoinSourceAuthorizationContext(
                 OrganizationJoinSourceAuthorizationOperation.DisableEnrollmentLink,

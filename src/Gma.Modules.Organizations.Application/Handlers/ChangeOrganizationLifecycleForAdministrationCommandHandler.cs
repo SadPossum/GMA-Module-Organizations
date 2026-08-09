@@ -12,6 +12,7 @@ using Gma.Modules.Organizations.Domain.Aggregates;
 
 internal sealed class ChangeOrganizationLifecycleForAdministrationCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationGovernanceCoordinator governance,
     ISystemClock clock,
     IIdGenerator ids)
     : ICommandHandler<ChangeOrganizationLifecycleForAdministrationCommand, OrganizationDto>
@@ -20,6 +21,10 @@ internal sealed class ChangeOrganizationLifecycleForAdministrationCommandHandler
         ChangeOrganizationLifecycleForAdministrationCommand command,
         CancellationToken cancellationToken)
     {
+        await governance.AcquireExclusiveAsync(
+            command.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
+
         Organization? organization = await organizations.GetOrganizationAsync(
             command.OrganizationId, cancellationToken).ConfigureAwait(false);
         if (organization is null)

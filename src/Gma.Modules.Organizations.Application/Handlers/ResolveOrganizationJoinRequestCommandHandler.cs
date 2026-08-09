@@ -14,6 +14,7 @@ using Gma.Modules.Organizations.Domain.Enums;
 
 internal sealed class ResolveOrganizationJoinRequestCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationGovernanceCoordinator governance,
     OrganizationJoinSourceAuthorization joinSourceAuthorization,
     OrganizationJoinAdmissionPolicy joinAdmissionPolicy,
     ISystemClock clock,
@@ -23,6 +24,10 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
         ResolveOrganizationJoinRequestCommand command,
         CancellationToken cancellationToken)
     {
+        await governance.AcquireSharedAsync(
+            command.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
+
         Result authorized = await joinSourceAuthorization.AuthorizeAsync(
             new OrganizationJoinSourceAuthorizationContext(
                 OrganizationJoinSourceAuthorizationOperation.ResolveJoinRequest,

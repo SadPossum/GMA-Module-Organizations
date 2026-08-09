@@ -17,6 +17,7 @@ using DomainApprovalMode = Gma.Modules.Organizations.Domain.Enums.OrganizationEn
 
 internal sealed class IssueOrganizationEnrollmentLinkCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationGovernanceCoordinator governance,
     IOrganizationJoinSourceIssuanceCoordinator issuance,
     OrganizationJoinSourceAuthorization joinSourceAuthorization,
     OrganizationMutationAdmissionPolicy mutationAdmission,
@@ -52,6 +53,10 @@ internal sealed class IssueOrganizationEnrollmentLinkCommandHandler(
                 subject.IsFailure ? subject.Error : actor.IsFailure ? actor.Error :
                 lifetime.IsFailure ? lifetime.Error : claims.IsFailure ? claims.Error : mode.Error);
         }
+
+        await governance.AcquireSharedAsync(
+            request.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
 
         Result authorized = await joinSourceAuthorization.AuthorizeAsync(
             new OrganizationJoinSourceAuthorizationContext(

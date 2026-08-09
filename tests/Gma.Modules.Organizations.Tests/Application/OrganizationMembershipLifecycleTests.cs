@@ -233,6 +233,7 @@ public sealed class OrganizationMembershipLifecycleTests
     {
         ServiceCollection services = new();
         services.AddOrganizationsApplication(new ConfigurationBuilder().Build());
+        services.AddTestOrganizationGovernance();
         if (mutationPolicy is not null)
         {
             services.AddSingleton(mutationPolicy);

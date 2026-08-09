@@ -15,6 +15,7 @@ using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.Organization
 
 internal sealed class EnsureOrganizationMembershipStateCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationGovernanceCoordinator governance,
     OrganizationMutationAdmissionPolicy mutationAdmission,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<EnsureOrganizationMembershipStateCommand, OrganizationMembershipLifecycleResult>
@@ -23,6 +24,10 @@ internal sealed class EnsureOrganizationMembershipStateCommandHandler(
         EnsureOrganizationMembershipStateCommand command,
         CancellationToken cancellationToken)
     {
+        await governance.AcquireExclusiveAsync(
+            command.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
+
         OrganizationMembership? membership = await organizations
             .GetMembershipAsync(command.OrganizationId, command.SubjectId, cancellationToken)
             .ConfigureAwait(false);

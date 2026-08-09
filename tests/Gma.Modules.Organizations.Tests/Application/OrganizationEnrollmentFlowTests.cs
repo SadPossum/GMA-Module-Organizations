@@ -610,6 +610,7 @@ public sealed partial class OrganizationEnrollmentFlowTests
             .Build();
         ServiceCollection services = new();
         services.AddOrganizationsApplication(configuration);
+        services.AddTestOrganizationGovernance();
         if (joinPolicy is not null)
         {
             services.AddSingleton(joinPolicy);

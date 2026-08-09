@@ -14,6 +14,7 @@ using Gma.Modules.Organizations.Domain.ValueObjects;
 
 internal sealed class UpdateOrganizationCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationGovernanceCoordinator governance,
     OrganizationMutationAdmissionPolicy mutationAdmission,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<UpdateOrganizationCommand, OrganizationDto>
@@ -22,6 +23,10 @@ internal sealed class UpdateOrganizationCommandHandler(
         UpdateOrganizationCommand command,
         CancellationToken cancellationToken)
     {
+        await governance.AcquireSharedAsync(
+            command.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
+
         Result<OrganizationMembership> owner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
             organizations, command.OrganizationId, command.SubjectId, cancellationToken).ConfigureAwait(false);
         if (owner.IsFailure)

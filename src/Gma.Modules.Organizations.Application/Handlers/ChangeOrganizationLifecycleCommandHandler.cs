@@ -13,6 +13,7 @@ using Gma.Modules.Organizations.Domain.Aggregates;
 
 internal sealed class ChangeOrganizationLifecycleCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationGovernanceCoordinator governance,
     OrganizationMutationAdmissionPolicy mutationAdmission,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<ChangeOrganizationLifecycleCommand, OrganizationDto>
@@ -21,6 +22,10 @@ internal sealed class ChangeOrganizationLifecycleCommandHandler(
         ChangeOrganizationLifecycleCommand command,
         CancellationToken cancellationToken)
     {
+        await governance.AcquireExclusiveAsync(
+            command.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
+
         Result<OrganizationMembership> owner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
             organizations, command.OrganizationId, command.SubjectId, cancellationToken).ConfigureAwait(false);
         if (owner.IsFailure)

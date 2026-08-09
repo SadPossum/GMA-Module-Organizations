@@ -13,6 +13,7 @@ using Gma.Modules.Organizations.Domain.Aggregates;
 
 internal sealed class RevokeOrganizationInvitationCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationGovernanceCoordinator governance,
     OrganizationJoinSourceAuthorization joinSourceAuthorization,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<RevokeOrganizationInvitationCommand, OrganizationInvitationDto>
@@ -21,6 +22,10 @@ internal sealed class RevokeOrganizationInvitationCommandHandler(
         RevokeOrganizationInvitationCommand command,
         CancellationToken cancellationToken)
     {
+        await governance.AcquireSharedAsync(
+            command.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
+
         Result authorized = await joinSourceAuthorization.AuthorizeAsync(
             new OrganizationJoinSourceAuthorizationContext(
                 OrganizationJoinSourceAuthorizationOperation.RevokeInvitation,

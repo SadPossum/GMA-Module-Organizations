@@ -14,6 +14,7 @@ using Gma.Modules.Organizations.Domain.Aggregates;
 using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipRole;
 using DomainInvitationState = Gma.Modules.Organizations.Domain.Enums.OrganizationInvitationState;
 using Gma.Modules.Organizations.Domain.Errors;
+using Gma.Modules.Organizations.Tests.Support;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Xunit;
@@ -438,6 +439,7 @@ public sealed class OrganizationInvitationFlowTests
             .Build();
         ServiceCollection services = new();
         services.AddOrganizationsApplication(configuration);
+        services.AddTestOrganizationGovernance();
         if (joinPolicy is not null)
         {
             services.AddSingleton(joinPolicy);

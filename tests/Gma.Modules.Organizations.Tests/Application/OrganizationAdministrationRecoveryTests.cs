@@ -78,6 +78,7 @@ public sealed class OrganizationAdministrationRecoveryTests
     {
         ServiceCollection services = new();
         services.AddOrganizationsApplication(new ConfigurationBuilder().Build());
+        services.AddTestOrganizationGovernance();
         services.AddSingleton<IOrganizationRepository>(repository);
         services.AddSingleton<ISystemClock>(new TestClock(Now));
         services.AddSingleton<IIdGenerator>(new TestIds());

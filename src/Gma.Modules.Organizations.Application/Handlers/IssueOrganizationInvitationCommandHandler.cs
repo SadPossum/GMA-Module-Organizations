@@ -16,6 +16,7 @@ using Microsoft.Extensions.Options;
 
 internal sealed class IssueOrganizationInvitationCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationGovernanceCoordinator governance,
     IOrganizationJoinSourceIssuanceCoordinator issuance,
     OrganizationJoinSourceAuthorization joinSourceAuthorization,
     OrganizationMutationAdmissionPolicy mutationAdmission,
@@ -50,6 +51,10 @@ internal sealed class IssueOrganizationInvitationCommandHandler(
                 subject.IsFailure ? subject.Error : actor.IsFailure ? actor.Error :
                 recipient.IsFailure ? recipient.Error : lifetime.Error);
         }
+
+        await governance.AcquireSharedAsync(
+            request.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
 
         Result authorized = await joinSourceAuthorization.AuthorizeAsync(
             new OrganizationJoinSourceAuthorizationContext(

@@ -15,6 +15,7 @@ using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.Organization
 
 internal sealed class TransferOrganizationOwnershipCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationGovernanceCoordinator governance,
     OrganizationMutationAdmissionPolicy mutationAdmission,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<TransferOrganizationOwnershipCommand, OrganizationMembershipDto>
@@ -28,6 +29,10 @@ internal sealed class TransferOrganizationOwnershipCommandHandler(
             return Result.Failure<OrganizationMembershipDto>(
                 OrganizationApplicationErrors.OwnershipTargetMustDiffer);
         }
+
+        await governance.AcquireExclusiveAsync(
+            command.OrganizationId,
+            cancellationToken).ConfigureAwait(false);
 
         Result<OrganizationMembership> currentOwner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
             organizations, command.OrganizationId, command.SubjectId, cancellationToken).ConfigureAwait(false);

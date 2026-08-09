@@ -461,6 +461,7 @@ public sealed class OrganizationMutationAdmissionTests
             .Build();
         ServiceCollection services = new();
         services.AddOrganizationsApplication(configuration);
+        services.AddTestOrganizationGovernance();
         services.AddSingleton<IOrganizationMutationAdmissionPolicy>(policy);
         services.AddSingleton<IOrganizationRepository>(repository);
         services.AddSingleton<IOrganizationJoinSourceIssuanceCoordinator>(

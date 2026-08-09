@@ -9,6 +9,7 @@ using Gma.Framework.Runtime.Identity;
 using Gma.Framework.Runtime.Time;
 using Gma.Modules.Organizations.Application;
 using Gma.Modules.Organizations.Application.Commands;
+using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Errors;
 using Gma.Modules.Organizations.IntegrationTests.Support;
@@ -227,6 +228,167 @@ public sealed class OrganizationJoinSourceIssuancePostgreSqlIntegrationTests
             await dbContext.EnrollmentLinks.CountAsync(
                 item => item.Id == replacementCollisionId);
         Assert.Equal(1, replacementCollisionRows);
+
+        await VerifyGovernanceCoordinationAsync(
+            provider,
+            organizationId,
+            created.Value.Organization.Version);
+    }
+
+    private static async Task VerifyGovernanceCoordinationAsync(
+        ServiceProvider provider,
+        Guid organizationId,
+        long initialOrganizationVersion)
+    {
+        long organizationVersion = initialOrganizationVersion;
+
+        await using (AsyncServiceScope sharedScope = provider.CreateAsyncScope())
+        {
+            OrganizationsDbContext dbContext = sharedScope.ServiceProvider
+                .GetRequiredService<OrganizationsDbContext>();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync();
+            IRequestDispatcher dispatcher = sharedScope.ServiceProvider
+                .GetRequiredService<IRequestDispatcher>();
+            Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> issued =
+                await dispatcher.SendAsync(
+                    Invitation(
+                        organizationId,
+                        Guid.NewGuid(),
+                        "shared-first@example.com"),
+                    CancellationToken.None);
+            Assert.True(issued.IsSuccess, issued.Error.Code);
+
+            Task<Result<OrganizationDto>> lifecycleTask = DispatchAsync(
+                provider,
+                new ChangeOrganizationLifecycleCommand(
+                    organizationId,
+                    OrganizationLifecycleAction.Suspend,
+                    organizationVersion,
+                    "owner",
+                    "user:owner"));
+            await AssertBlockedAsync(lifecycleTask);
+
+            await transaction.CommitAsync();
+            Result<OrganizationDto> suspended = await lifecycleTask.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(suspended.IsSuccess, suspended.Error.Code);
+            organizationVersion = suspended.Value.Version;
+        }
+
+        Result<OrganizationDto> reactivated = await DispatchAsync(
+            provider,
+            new ChangeOrganizationLifecycleCommand(
+                organizationId,
+                OrganizationLifecycleAction.Reactivate,
+                organizationVersion,
+                "owner",
+                "user:owner"));
+        Assert.True(reactivated.IsSuccess, reactivated.Error.Code);
+        organizationVersion = reactivated.Value.Version;
+
+        await using (AsyncServiceScope exclusiveScope = provider.CreateAsyncScope())
+        {
+            OrganizationsDbContext dbContext = exclusiveScope.ServiceProvider
+                .GetRequiredService<OrganizationsDbContext>();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync();
+            IRequestDispatcher dispatcher = exclusiveScope.ServiceProvider
+                .GetRequiredService<IRequestDispatcher>();
+            Result<OrganizationDto> suspended = await dispatcher.SendAsync(
+                new ChangeOrganizationLifecycleCommand(
+                    organizationId,
+                    OrganizationLifecycleAction.Suspend,
+                    organizationVersion,
+                    "owner",
+                    "user:owner"),
+                CancellationToken.None);
+            Assert.True(suspended.IsSuccess, suspended.Error.Code);
+
+            Task<Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>>> issueTask =
+                DispatchAsync(
+                    provider,
+                    Invitation(
+                        organizationId,
+                        Guid.NewGuid(),
+                        "exclusive-first@example.com"));
+            await AssertBlockedAsync(issueTask);
+
+            await transaction.CommitAsync();
+            Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> rejected =
+                await issueTask.WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(rejected.IsFailure);
+            Assert.Equal(OrganizationDomainErrors.OrganizationNotActive.Code, rejected.Error.Code);
+            organizationVersion = suspended.Value.Version;
+        }
+
+        reactivated = await DispatchAsync(
+            provider,
+            new ChangeOrganizationLifecycleCommand(
+                organizationId,
+                OrganizationLifecycleAction.Reactivate,
+                organizationVersion,
+                "owner",
+                "user:owner"));
+        Assert.True(reactivated.IsSuccess, reactivated.Error.Code);
+
+        await using (AsyncServiceScope sharedHolderScope = provider.CreateAsyncScope())
+        {
+            OrganizationsDbContext dbContext = sharedHolderScope.ServiceProvider
+                .GetRequiredService<OrganizationsDbContext>();
+            await using var transaction = await dbContext.Database.BeginTransactionAsync();
+            IOrganizationGovernanceCoordinator governance = sharedHolderScope.ServiceProvider
+                .GetRequiredService<IOrganizationGovernanceCoordinator>();
+            await governance.AcquireSharedAsync(organizationId, CancellationToken.None);
+
+            Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> parallelShared =
+                await DispatchAsync(
+                        provider,
+                        Invitation(
+                            organizationId,
+                            Guid.NewGuid(),
+                            "parallel-shared@example.com"))
+                    .WaitAsync(TimeSpan.FromSeconds(10));
+            Assert.True(parallelShared.IsSuccess, parallelShared.Error.Code);
+            await transaction.RollbackAsync();
+        }
+
+        Guid otherOrganizationId = Guid.NewGuid();
+        Result<OrganizationMembershipSummaryDto> otherOrganization = await DispatchAsync(
+            provider,
+            new CreateOrganizationCommand(
+                otherOrganizationId,
+                "Canal House",
+                "canal-house",
+                "other-owner",
+                "user:other-owner"));
+        Assert.True(otherOrganization.IsSuccess, otherOrganization.Error.Code);
+
+        await using AsyncServiceScope exclusiveHolderScope = provider.CreateAsyncScope();
+        OrganizationsDbContext exclusiveDbContext = exclusiveHolderScope.ServiceProvider
+            .GetRequiredService<OrganizationsDbContext>();
+        await using var exclusiveTransaction = await exclusiveDbContext.Database.BeginTransactionAsync();
+        IOrganizationGovernanceCoordinator exclusiveGovernance = exclusiveHolderScope.ServiceProvider
+            .GetRequiredService<IOrganizationGovernanceCoordinator>();
+        await exclusiveGovernance.AcquireExclusiveAsync(organizationId, CancellationToken.None);
+
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> unrelated =
+            await DispatchAsync(
+                    provider,
+                    new IssueOrganizationInvitationCommand(
+                        new OrganizationInvitationIssuanceRequest(
+                            Guid.NewGuid(),
+                            otherOrganizationId,
+                            "unrelated@example.com",
+                            24,
+                            "other-owner",
+                            "user:other-owner")))
+                .WaitAsync(TimeSpan.FromSeconds(10));
+        Assert.True(unrelated.IsSuccess, unrelated.Error.Code);
+        await exclusiveTransaction.RollbackAsync();
+    }
+
+    private static async Task AssertBlockedAsync(Task task)
+    {
+        await Task.Delay(TimeSpan.FromMilliseconds(250));
+        Assert.False(task.IsCompleted, "The conflicting governance operation did not wait for the transaction lock.");
     }
 
     private static ServiceProvider CreateProvider(string connectionString)
