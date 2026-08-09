@@ -52,7 +52,9 @@ public static class OrganizationMappings
         invitation.AcceptedMembershipId,
         invitation.Version,
         invitation.CreatedAtUtc,
-        invitation.LastChangedAtUtc);
+        invitation.LastChangedAtUtc,
+        invitation.ReplacesInvitationId,
+        invitation.ReplacesInvitationVersion);
 
     public static OrganizationEnrollmentLinkDto ToDto(
         this OrganizationEnrollmentLink link,
@@ -60,7 +62,8 @@ public static class OrganizationMappings
         link.Id, link.OrganizationId, link.CreatorSubjectId, link.ExpiresAtUtc,
         link.MaximumClaims, link.ReservedClaims, MapMode(link.ApprovalMode),
         MapStatus(link.Status, link.ExpiresAtUtc, link.ReservedClaims, link.MaximumClaims, nowUtc),
-        link.Version, link.CreatedAtUtc, link.LastChangedAtUtc);
+        link.Version, link.CreatedAtUtc, link.LastChangedAtUtc,
+        link.ReplacesEnrollmentLinkId, link.ReplacesEnrollmentLinkVersion);
 
     public static OrganizationEnrollmentClaimDto ToDto(this OrganizationEnrollmentClaim claim) => new(
         claim.Id, claim.EnrollmentLinkId, claim.OrganizationId, claim.SubjectId,

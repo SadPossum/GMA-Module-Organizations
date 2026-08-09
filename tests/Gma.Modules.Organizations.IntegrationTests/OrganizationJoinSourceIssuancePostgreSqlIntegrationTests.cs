@@ -10,6 +10,7 @@ using Gma.Framework.Runtime.Time;
 using Gma.Modules.Organizations.Application;
 using Gma.Modules.Organizations.Application.Commands;
 using Gma.Modules.Organizations.Contracts;
+using Gma.Modules.Organizations.Domain.Errors;
 using Gma.Modules.Organizations.IntegrationTests.Support;
 using Gma.Modules.Organizations.Persistence;
 using Microsoft.EntityFrameworkCore;
@@ -94,6 +95,108 @@ public sealed class OrganizationJoinSourceIssuancePostgreSqlIntegrationTests
             OrganizationApplicationErrors.JoinSourceIssuanceConflict.Code,
             crossKindError.Code);
 
+        OrganizationInvitationDto invitationPredecessor = exactResults.Single(result =>
+            result.IsSuccess &&
+            result.Value.Outcome == OrganizationJoinSourceIssuanceOutcome.Issued).Value.Source!;
+        Guid invitationReplacementId = Guid.NewGuid();
+        ReissueOrganizationInvitationCommand reissue = Reissue(
+            organizationId,
+            invitationPredecessor,
+            invitationReplacementId);
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>>[] reissueResults =
+            await Task.WhenAll(
+                DispatchAsync(provider, reissue),
+                DispatchAsync(provider, reissue));
+
+        Assert.All(reissueResults, result => Assert.True(result.IsSuccess, result.Error.Code));
+        Assert.Single(reissueResults, result =>
+            result.Value.Outcome == OrganizationJoinSourceIssuanceOutcome.Issued &&
+            result.Value.Token is not null);
+        Assert.Single(reissueResults, result =>
+            result.Value.Outcome == OrganizationJoinSourceIssuanceOutcome.AlreadyIssued &&
+            result.Value.Token is null);
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> changedReissue =
+            await DispatchAsync(provider, reissue with { LifetimeHours = 48 });
+        Assert.Equal(
+            OrganizationApplicationErrors.JoinSourceIssuanceConflict.Code,
+            changedReissue.Error.Code);
+
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> issuedForRotation =
+            await DispatchAsync(provider, Enrollment(organizationId, Guid.NewGuid(), 20));
+        Assert.True(issuedForRotation.IsSuccess, issuedForRotation.Error.Code);
+        Guid enrollmentReplacementId = Guid.NewGuid();
+        RotateOrganizationEnrollmentLinkCommand rotate = Rotate(
+            organizationId,
+            issuedForRotation.Value.Source!,
+            enrollmentReplacementId);
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>[] rotationResults =
+            await Task.WhenAll(
+                DispatchAsync(provider, rotate),
+                DispatchAsync(provider, rotate));
+
+        Assert.All(rotationResults, result => Assert.True(result.IsSuccess, result.Error.Code));
+        Assert.Single(rotationResults, result =>
+            result.Value.Outcome == OrganizationJoinSourceIssuanceOutcome.Issued &&
+            result.Value.Token is not null);
+        Assert.Single(rotationResults, result =>
+            result.Value.Outcome == OrganizationJoinSourceIssuanceOutcome.AlreadyIssued &&
+            result.Value.Token is null);
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> changedRotation =
+            await DispatchAsync(
+                provider,
+                rotate with { ReplacementLifetimeHours = 48 });
+        Assert.Equal(
+            OrganizationApplicationErrors.JoinSourceIssuanceConflict.Code,
+            changedRotation.Error.Code);
+
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> competingPredecessor =
+            await DispatchAsync(
+                provider,
+                Invitation(organizationId, Guid.NewGuid(), "competing@example.com"));
+        Assert.True(competingPredecessor.IsSuccess, competingPredecessor.Error.Code);
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>>[] competingResults =
+            await Task.WhenAll(
+                DispatchAsync(provider, Reissue(
+                    organizationId,
+                    competingPredecessor.Value.Source!,
+                    Guid.NewGuid())),
+                DispatchAsync(provider, Reissue(
+                    organizationId,
+                    competingPredecessor.Value.Source!,
+                    Guid.NewGuid())));
+        Assert.Single(competingResults, result => result.IsSuccess);
+        Assert.Single(competingResults, result =>
+            result.IsFailure &&
+            result.Error.Code == OrganizationDomainErrors.VersionConflict.Code);
+
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> collisionInvitation =
+            await DispatchAsync(
+                provider,
+                Invitation(organizationId, Guid.NewGuid(), "collision@example.com"));
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> collisionEnrollment =
+            await DispatchAsync(provider, Enrollment(organizationId, Guid.NewGuid(), 30));
+        Assert.True(collisionInvitation.IsSuccess, collisionInvitation.Error.Code);
+        Assert.True(collisionEnrollment.IsSuccess, collisionEnrollment.Error.Code);
+        Guid replacementCollisionId = Guid.NewGuid();
+        Task<Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>>> reissueCollisionTask =
+            DispatchAsync(provider, Reissue(
+                organizationId,
+                collisionInvitation.Value.Source!,
+                replacementCollisionId));
+        Task<Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>> rotateCollisionTask =
+            DispatchAsync(provider, Rotate(
+                organizationId,
+                collisionEnrollment.Value.Source!,
+                replacementCollisionId));
+        await Task.WhenAll(reissueCollisionTask, rotateCollisionTask);
+        Assert.NotEqual(reissueCollisionTask.Result.IsSuccess, rotateCollisionTask.Result.IsSuccess);
+        Error replacementCollisionError = reissueCollisionTask.Result.IsFailure
+            ? reissueCollisionTask.Result.Error
+            : rotateCollisionTask.Result.Error;
+        Assert.Equal(
+            OrganizationApplicationErrors.JoinSourceIssuanceConflict.Code,
+            replacementCollisionError.Code);
+
         await using AsyncServiceScope verificationScope = provider.CreateAsyncScope();
         OrganizationsDbContext dbContext = verificationScope.ServiceProvider
             .GetRequiredService<OrganizationsDbContext>();
@@ -108,6 +211,22 @@ public sealed class OrganizationJoinSourceIssuancePostgreSqlIntegrationTests
             await dbContext.EnrollmentLinks.CountAsync(
                 item => item.Id == crossKindSourceId);
         Assert.Equal(1, crossKindRows);
+        Assert.Single(await dbContext.Invitations
+            .Where(item => item.ReplacesInvitationId == invitationPredecessor.InvitationId)
+            .ToArrayAsync());
+        Assert.Single(await dbContext.EnrollmentLinks
+            .Where(item => item.ReplacesEnrollmentLinkId ==
+                           issuedForRotation.Value.Source!.EnrollmentLinkId)
+            .ToArrayAsync());
+        Assert.Single(await dbContext.Invitations
+            .Where(item => item.ReplacesInvitationId ==
+                           competingPredecessor.Value.Source!.InvitationId)
+            .ToArrayAsync());
+        int replacementCollisionRows = await dbContext.Invitations.CountAsync(
+                item => item.Id == replacementCollisionId) +
+            await dbContext.EnrollmentLinks.CountAsync(
+                item => item.Id == replacementCollisionId);
+        Assert.Equal(1, replacementCollisionRows);
     }
 
     private static ServiceProvider CreateProvider(string connectionString)
@@ -178,6 +297,32 @@ public sealed class OrganizationJoinSourceIssuancePostgreSqlIntegrationTests
             OrganizationEnrollmentApprovalMode.RequiresApproval,
             "owner",
             "user:owner"));
+
+    private static ReissueOrganizationInvitationCommand Reissue(
+        Guid organizationId,
+        OrganizationInvitationDto predecessor,
+        Guid replacementSourceId) =>
+        new(
+            organizationId,
+            predecessor.InvitationId,
+            replacementSourceId,
+            predecessor.Version,
+            24,
+            "owner",
+            "user:owner");
+
+    private static RotateOrganizationEnrollmentLinkCommand Rotate(
+        Guid organizationId,
+        OrganizationEnrollmentLinkDto predecessor,
+        Guid replacementSourceId) =>
+        new(
+            organizationId,
+            predecessor.EnrollmentLinkId,
+            replacementSourceId,
+            predecessor.Version,
+            24,
+            "owner",
+            "user:owner");
 
     private sealed class FixedClock : ISystemClock
     {

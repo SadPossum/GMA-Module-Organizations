@@ -3,12 +3,12 @@ namespace Gma.Modules.Organizations.Application.Commands;
 using Gma.Framework.Cqrs;
 using Gma.Modules.Organizations.Contracts;
 
-public sealed record ReissueOrganizationInvitationCommand(
+public sealed record RotateOrganizationEnrollmentLinkCommand(
     Guid OrganizationId,
-    Guid InvitationId,
+    Guid EnrollmentLinkId,
     Guid ReplacementSourceId,
     long ExpectedVersion,
-    int? LifetimeHours,
+    int? ReplacementLifetimeHours,
     string SubjectId,
     string ActorId) : ITransactionalCommand<
-        OrganizationJoinSourceIssuance<OrganizationInvitationDto>>;
+        OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>;

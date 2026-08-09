@@ -9,7 +9,15 @@ internal sealed class OrganizationInvitationConfiguration : IEntityTypeConfigura
 {
     public void Configure(EntityTypeBuilder<OrganizationInvitation> builder)
     {
-        builder.ToTable("organization_invitations");
+        builder.ToTable(
+            "organization_invitations",
+            table => table.HasCheckConstraint(
+                "CK_organization_invitations_replacement_lineage",
+                "(\"ReplacesInvitationId\" IS NULL AND " +
+                "\"ReplacesInvitationVersion\" IS NULL) OR " +
+                "(\"ReplacesInvitationId\" IS NOT NULL AND " +
+                "\"ReplacesInvitationId\" <> \"Id\" AND " +
+                "\"ReplacesInvitationVersion\" > 0)"));
         builder.HasKey(invitation => invitation.Id);
         builder.Ignore(invitation => invitation.DomainEvents);
         builder.Property(invitation => invitation.InviterSubjectId)
@@ -32,6 +40,7 @@ internal sealed class OrganizationInvitationConfiguration : IEntityTypeConfigura
             .HasMaxLength(OrganizationActorId.MaxLength)
             .IsRequired();
         builder.HasIndex(invitation => invitation.TokenDigest).IsUnique();
+        builder.HasIndex(invitation => invitation.ReplacesInvitationId).IsUnique();
         builder.HasIndex(invitation => new
         {
             invitation.OrganizationId,

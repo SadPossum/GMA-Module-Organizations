@@ -299,6 +299,12 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 
+                    b.Property<Guid?>("ReplacesEnrollmentLinkId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("ReplacesEnrollmentLinkVersion")
+                        .HasColumnType("bigint");
+
                     b.Property<int>("ReservedClaims")
                         .HasColumnType("integer");
 
@@ -320,6 +326,9 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ReplacesEnrollmentLinkId")
+                        .IsUnique();
+
                     b.HasIndex("TokenDigest")
                         .IsUnique();
 
@@ -329,7 +338,10 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
 
                     b.HasIndex("OrganizationId", "Status", "CreatedAtUtc");
 
-                    b.ToTable("organization_enrollment_links", "organizations");
+                    b.ToTable("organization_enrollment_links", "organizations", t =>
+                        {
+                            t.HasCheckConstraint("CK_organization_enrollment_links_replacement_lineage", "(\"ReplacesEnrollmentLinkId\" IS NULL AND \"ReplacesEnrollmentLinkVersion\" IS NULL) OR (\"ReplacesEnrollmentLinkId\" IS NOT NULL AND \"ReplacesEnrollmentLinkId\" <> \"Id\" AND \"ReplacesEnrollmentLinkVersion\" > 0)");
+                        });
                 });
 
             modelBuilder.Entity("Gma.Modules.Organizations.Domain.Aggregates.OrganizationInvitation", b =>
@@ -379,6 +391,12 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
                         .HasMaxLength(320)
                         .HasColumnType("character varying(320)");
 
+                    b.Property<Guid?>("ReplacesInvitationId")
+                        .HasColumnType("uuid");
+
+                    b.Property<long?>("ReplacesInvitationVersion")
+                        .HasColumnType("bigint");
+
                     b.Property<int>("Status")
                         .HasColumnType("integer");
 
@@ -397,6 +415,9 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
 
                     b.HasKey("Id");
 
+                    b.HasIndex("ReplacesInvitationId")
+                        .IsUnique();
+
                     b.HasIndex("TokenDigest")
                         .IsUnique();
 
@@ -406,7 +427,10 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
 
                     b.HasIndex("OrganizationId", "Status", "CreatedAtUtc");
 
-                    b.ToTable("organization_invitations", "organizations");
+                    b.ToTable("organization_invitations", "organizations", t =>
+                        {
+                            t.HasCheckConstraint("CK_organization_invitations_replacement_lineage", "(\"ReplacesInvitationId\" IS NULL AND \"ReplacesInvitationVersion\" IS NULL) OR (\"ReplacesInvitationId\" IS NOT NULL AND \"ReplacesInvitationId\" <> \"Id\" AND \"ReplacesInvitationVersion\" > 0)");
+                        });
                 });
 
             modelBuilder.Entity("Gma.Modules.Organizations.Domain.Aggregates.OrganizationMembership", b =>

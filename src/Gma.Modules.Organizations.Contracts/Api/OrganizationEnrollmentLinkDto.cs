@@ -11,4 +11,6 @@ public sealed record OrganizationEnrollmentLinkDto(
     OrganizationEnrollmentLinkStatus Status,
     long Version,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset LastChangedAtUtc);
+    DateTimeOffset LastChangedAtUtc,
+    Guid? ReplacesEnrollmentLinkId = null,
+    long? ReplacesEnrollmentLinkVersion = null);

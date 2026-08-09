@@ -33,6 +33,8 @@ tracked in
 [Organizations Mutation Admission Policy Task](organizations-mutation-admission-policy-task.md).
 The Contracts facade for product-owned source management is tracked in
 [Organizations Join Source Management Task](organizations-join-source-management-task.md).
+Retry-safe invitation reissue and enrollment-link rotation are tracked in
+[Organizations Join Source Replacement Retry Safety Task](organizations-join-source-replacement-retry-safety-task.md).
 The idempotent Contracts facade for issuing new invitation and enrollment
 sources is tracked in
 [Organizations Join Source Issuance Task](organizations-join-source-issuance-task.md).
@@ -73,6 +75,10 @@ Invitation and enrollment-link creation requires a caller-owned `sourceId`.
 Exact retries return the existing source with an `already-issued` outcome and no
 token; plaintext tokens are returned only by the transaction that creates the
 source.
+
+Invitation reissue and enrollment-link rotation likewise require a caller-owned
+replacement source id. A committed replacement records non-secret predecessor
+lineage so a lost response can be reconciled without replaying its token.
 
 The administration surface lives under `/api/admin/organizations` and uses global `organizations.read` and `organizations.manage` permissions. Destructive lifecycle and owner-recovery operations require explicit confirmation.
 

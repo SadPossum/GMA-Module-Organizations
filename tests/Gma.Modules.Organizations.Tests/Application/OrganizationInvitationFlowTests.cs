@@ -12,6 +12,7 @@ using Gma.Modules.Organizations.Api;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipRole;
+using DomainInvitationState = Gma.Modules.Organizations.Domain.Enums.OrganizationInvitationState;
 using Gma.Modules.Organizations.Domain.Errors;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
@@ -104,6 +105,51 @@ public sealed class OrganizationInvitationFlowTests
         Assert.True(result.IsFailure);
         Assert.Equal(OrganizationApplicationErrors.JoinSourceIssuanceConflict, result.Error);
         Assert.Single(repository.Invitations);
+    }
+
+    [Fact]
+    public async Task Reissue_is_idempotent_records_lineage_and_never_replays_the_secret()
+    {
+        TestRepository repository = CreateRepository();
+        TestClock clock = new();
+        using ServiceProvider services = CreateServices(repository, clock);
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationInvitationIssuedDto issued = await IssueAsync(
+            services, organization, "member@example.com", 24);
+        var reissue = services.GetRequiredService<ICommandHandler<
+            ReissueOrganizationInvitationCommand,
+            OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
+        Guid replacementId = Guid.NewGuid();
+        ReissueOrganizationInvitationCommand command = new(
+            organization.Id,
+            issued.Invitation.InvitationId,
+            replacementId,
+            issued.Invitation.Version,
+            48,
+            "owner",
+            "user:owner");
+
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> first =
+            await reissue.HandleAsync(command, CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> replay =
+            await reissue.HandleAsync(command, CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> changed =
+            await reissue.HandleAsync(command with { LifetimeHours = 72 }, CancellationToken.None);
+
+        Assert.True(first.IsSuccess, first.Error.Code);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.Issued, first.Value.Outcome);
+        Assert.Equal(43, Assert.IsType<string>(first.Value.Token).Length);
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.AlreadyIssued, replay.Value.Outcome);
+        Assert.Null(replay.Value.Token);
+        Assert.Equal(OrganizationApplicationErrors.JoinSourceIssuanceConflict, changed.Error);
+        Assert.Equal(replacementId, first.Value.Source!.InvitationId);
+        Assert.Equal(issued.Invitation.InvitationId, first.Value.Source.ReplacesInvitationId);
+        Assert.Equal(issued.Invitation.Version, first.Value.Source.ReplacesInvitationVersion);
+        Assert.Equal(2, repository.Invitations.Count);
+        Assert.Equal(
+            DomainInvitationState.Superseded,
+            repository.Invitations.Single(item => item.Id == issued.Invitation.InvitationId).Status);
     }
 
     [Fact]
@@ -307,7 +353,9 @@ public sealed class OrganizationInvitationFlowTests
         TestClock clock = new();
         using ServiceProvider services = CreateServices(repository, clock);
         var reissue = services.GetRequiredService<
-            ICommandHandler<ReissueOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
+            ICommandHandler<
+                ReissueOrganizationInvitationCommand,
+                OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
         var revoke = services.GetRequiredService<
             ICommandHandler<RevokeOrganizationInvitationCommand, OrganizationInvitationDto>>();
         Organization organization = Assert.Single(repository.Organizations);
@@ -317,9 +365,10 @@ public sealed class OrganizationInvitationFlowTests
         Assert.True(organization.Suspend(
             organization.Version, "user:owner", Guid.NewGuid(), clock.UtcNow).IsSuccess);
 
-        Result<OrganizationInvitationIssuedDto> replacement = await reissue.HandleAsync(
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> replacement =
+            await reissue.HandleAsync(
             new ReissueOrganizationInvitationCommand(
-                organization.Id, issued.Invitation.InvitationId, issued.Invitation.Version,
+                organization.Id, issued.Invitation.InvitationId, Guid.NewGuid(), issued.Invitation.Version,
                 24, "owner", "user:owner"),
             CancellationToken.None);
         Result<OrganizationInvitationDto> revoked = await revoke.HandleAsync(

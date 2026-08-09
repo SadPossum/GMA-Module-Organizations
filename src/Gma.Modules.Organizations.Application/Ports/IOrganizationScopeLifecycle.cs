@@ -171,7 +171,9 @@ public sealed record OrganizationScopeInvitationExportRecord(
     string CreatedBy,
     DateTimeOffset CreatedAtUtc,
     string LastChangedBy,
-    DateTimeOffset LastChangedAtUtc)
+    DateTimeOffset LastChangedAtUtc,
+    Guid? ReplacesInvitationId = null,
+    long? ReplacesInvitationVersion = null)
     : OrganizationScopeExportRecord;
 
 public sealed record OrganizationScopeEnrollmentLinkExportRecord(
@@ -188,7 +190,9 @@ public sealed record OrganizationScopeEnrollmentLinkExportRecord(
     string CreatedBy,
     DateTimeOffset CreatedAtUtc,
     string LastChangedBy,
-    DateTimeOffset LastChangedAtUtc)
+    DateTimeOffset LastChangedAtUtc,
+    Guid? ReplacesEnrollmentLinkId = null,
+    long? ReplacesEnrollmentLinkVersion = null)
     : OrganizationScopeExportRecord;
 
 public sealed record OrganizationScopeEnrollmentClaimExportRecord(

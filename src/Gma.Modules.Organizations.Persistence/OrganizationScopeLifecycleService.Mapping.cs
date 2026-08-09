@@ -51,7 +51,9 @@ internal sealed partial class OrganizationScopeLifecycleService
             invitation.CreatedBy,
             invitation.CreatedAtUtc,
             invitation.LastChangedBy,
-            invitation.LastChangedAtUtc);
+            invitation.LastChangedAtUtc,
+            invitation.ReplacesInvitationId,
+            invitation.ReplacesInvitationVersion);
 
     private static OrganizationScopeExportRecord Map(
         OrganizationEnrollmentLink link) =>
@@ -69,7 +71,9 @@ internal sealed partial class OrganizationScopeLifecycleService
             link.CreatedBy,
             link.CreatedAtUtc,
             link.LastChangedBy,
-            link.LastChangedAtUtc);
+            link.LastChangedAtUtc,
+            link.ReplacesEnrollmentLinkId,
+            link.ReplacesEnrollmentLinkVersion);
 
     private static OrganizationScopeExportRecord Map(
         OrganizationEnrollmentClaim claim) =>

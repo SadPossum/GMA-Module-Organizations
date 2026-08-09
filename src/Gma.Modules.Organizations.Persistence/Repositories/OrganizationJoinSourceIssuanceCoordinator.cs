@@ -31,6 +31,22 @@ internal sealed class OrganizationJoinSourceIssuanceCoordinator(
             cancellationToken).ConfigureAwait(false);
     }
 
+    public async Task AcquireReplacementAsync(
+        Guid sourceId,
+        Guid replacementSourceId,
+        CancellationToken cancellationToken)
+    {
+        Guid first = sourceId.CompareTo(replacementSourceId) <= 0
+            ? sourceId
+            : replacementSourceId;
+        Guid second = first == sourceId ? replacementSourceId : sourceId;
+        await this.AcquireAsync(first, cancellationToken).ConfigureAwait(false);
+        if (second != first)
+        {
+            await this.AcquireAsync(second, cancellationToken).ConfigureAwait(false);
+        }
+    }
+
     private Task AcquireAsync(Guid sourceId, CancellationToken cancellationToken) =>
         EfTransactionKeyLock.AcquireAsync(
             dbContext,

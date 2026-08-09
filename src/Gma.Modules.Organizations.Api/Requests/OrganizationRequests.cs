@@ -29,7 +29,10 @@ public sealed record CreateOrganizationInvitationRequest(
 
 public sealed record RevokeOrganizationInvitationRequest(long ExpectedVersion);
 
-public sealed record ReissueOrganizationInvitationRequest(long ExpectedVersion, int? LifetimeHours);
+public sealed record ReissueOrganizationInvitationRequest(
+    Guid ReplacementSourceId,
+    long ExpectedVersion,
+    int? LifetimeHours);
 
 public sealed record AcceptOrganizationInvitationRequest(string Token);
 
@@ -41,7 +44,10 @@ public sealed record CreateOrganizationEnrollmentLinkRequest(
     int MaximumClaims,
     OrganizationEnrollmentApprovalMode ApprovalMode);
 
-public sealed record ChangeOrganizationEnrollmentLinkRequest(
+public sealed record DisableOrganizationEnrollmentLinkRequest(long ExpectedVersion);
+
+public sealed record RotateOrganizationEnrollmentLinkRequest(
+    Guid ReplacementSourceId,
     long ExpectedVersion,
     int? ReplacementLifetimeHours);
 

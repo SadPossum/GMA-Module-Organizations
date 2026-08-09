@@ -268,11 +268,18 @@ internal static class OrganizationEndpoints
                 return Results.Unauthorized();
             }
 
-            return (await dispatcher.SendAsync(new ReissueOrganizationInvitationCommand(
-                organizationId, invitationId, request.ExpectedVersion, request.LifetimeHours,
-                subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
+            Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> result =
+                await dispatcher.SendAsync(new ReissueOrganizationInvitationCommand(
+                    organizationId,
+                    invitationId,
+                    request.ReplacementSourceId,
+                    request.ExpectedVersion,
+                    request.LifetimeHours,
+                    subjectId,
+                    OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false);
+            return OrganizationEndpointSupport.MapInvitationIssuance(result)
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        }).Produces<OrganizationInvitationIssuedDto>(StatusCodes.Status200OK);
+        }).Produces<OrganizationInvitationIssuanceDto>(StatusCodes.Status200OK);
         OrganizationEndpointSupport.RequireAssuranceWhenConfigured(reissueInvitation, governanceAssurance);
     }
 

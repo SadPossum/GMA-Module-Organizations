@@ -35,8 +35,14 @@ public sealed class OrganizationScopeLifecycleTests
             OrganizationMembershipRole.Member);
         OrganizationInvitation invitation = CreateInvitation(
             Id(4),
-            organizationId);
-        OrganizationEnrollmentLink link = CreateLink(Id(5), organizationId);
+            organizationId,
+            Id(40),
+            3);
+        OrganizationEnrollmentLink link = CreateLink(
+            Id(5),
+            organizationId,
+            Id(50),
+            6);
         OrganizationEnrollmentClaim claim = CreateClaim(
             Id(6),
             organizationId,
@@ -113,6 +119,25 @@ public sealed class OrganizationScopeLifecycleTests
                     "Digest",
                     StringComparison.OrdinalIgnoreCase));
         }
+
+        OrganizationScopeInvitationExportRecord invitationExport = Assert.IsType<
+            OrganizationScopeInvitationExportRecord>(Assert.Single((await service.ExportAsync(
+                Request(
+                    organizationId,
+                    snapshot.Revision,
+                    OrganizationScopeExportStore.Invitations),
+                CancellationToken.None)).Records));
+        Assert.Equal(Id(40), invitationExport.ReplacesInvitationId);
+        Assert.Equal(3, invitationExport.ReplacesInvitationVersion);
+        OrganizationScopeEnrollmentLinkExportRecord enrollmentLinkExport = Assert.IsType<
+            OrganizationScopeEnrollmentLinkExportRecord>(Assert.Single((await service.ExportAsync(
+                Request(
+                    organizationId,
+                    snapshot.Revision,
+                    OrganizationScopeExportStore.EnrollmentLinks),
+                CancellationToken.None)).Records));
+        Assert.Equal(Id(50), enrollmentLinkExport.ReplacesEnrollmentLinkId);
+        Assert.Equal(6, enrollmentLinkExport.ReplacesEnrollmentLinkVersion);
 
         dbContext.Memberships.Add(CreateMembership(
             Id(7),
@@ -303,7 +328,9 @@ public sealed class OrganizationScopeLifecycleTests
 
     private static OrganizationInvitation CreateInvitation(
         Guid id,
-        Guid organizationId) =>
+        Guid organizationId,
+        Guid? replacesInvitationId = null,
+        long? replacesInvitationVersion = null) =>
         OrganizationInvitation.Create(
             id,
             organizationId,
@@ -313,11 +340,15 @@ public sealed class OrganizationScopeLifecycleTests
             Now.AddDays(7),
             "user:owner",
             Guid.NewGuid(),
-            Now).Value;
+            Now,
+            replacesInvitationId,
+            replacesInvitationVersion).Value;
 
     private static OrganizationEnrollmentLink CreateLink(
         Guid id,
-        Guid organizationId) =>
+        Guid organizationId,
+        Guid? replacesEnrollmentLinkId = null,
+        long? replacesEnrollmentLinkVersion = null) =>
         OrganizationEnrollmentLink.Create(
             id,
             organizationId,
@@ -328,7 +359,9 @@ public sealed class OrganizationScopeLifecycleTests
             OrganizationEnrollmentApprovalMode.RequiresApproval,
             "user:owner",
             Guid.NewGuid(),
-            Now).Value;
+            Now,
+            replacesEnrollmentLinkId,
+            replacesEnrollmentLinkVersion).Value;
 
     private static OrganizationEnrollmentClaim CreateClaim(
         Guid id,

@@ -93,20 +93,16 @@ internal sealed class OrganizationJoinSourceManager(IRequestDispatcher dispatche
         CancellationToken cancellationToken = default)
     {
         ArgumentNullException.ThrowIfNull(request);
-        Result<OrganizationEnrollmentLinkMutationDto> result = await dispatcher.SendAsync(
-                new ChangeOrganizationEnrollmentLinkCommand(
+        Result<OrganizationEnrollmentLinkDto> result = await dispatcher.SendAsync(
+                new DisableOrganizationEnrollmentLinkCommand(
                     request.OrganizationId,
                     request.EnrollmentLinkId,
-                    OrganizationEnrollmentLinkAction.Disable,
                     request.ExpectedVersion,
-                    ReplacementLifetimeHours: null,
                     request.SubjectId,
                     request.ActorId),
                 cancellationToken)
             .ConfigureAwait(false);
-        return result.IsFailure
-            ? Failure<OrganizationEnrollmentLinkDto>(result.Error.Code)
-            : Success(result.Value.EnrollmentLink);
+        return Complete(result);
     }
 
     private static OrganizationJoinSourceOperation<TValue> Complete<TValue>(Result<TValue> result)

@@ -29,4 +29,9 @@ internal sealed class TestOrganizationJoinSourceIssuanceCoordinator(
         Guid sourceId,
         CancellationToken cancellationToken) =>
         organizations.GetEnrollmentLinkAsync(organizationId, sourceId, cancellationToken);
+
+    public Task AcquireReplacementAsync(
+        Guid sourceId,
+        Guid replacementSourceId,
+        CancellationToken cancellationToken) => Task.CompletedTask;
 }

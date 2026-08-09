@@ -28,12 +28,14 @@ public static class OrganizationDomainErrors
     public static readonly Error InvitationRecipientInvalid = new("Organizations.InvitationRecipientInvalid", "The invitation recipient email is invalid.");
     public static readonly Error InvitationTokenDigestInvalid = new("Organizations.InvitationTokenDigestInvalid", "The invitation token digest is invalid.");
     public static readonly Error InvitationExpiryInvalid = new("Organizations.InvitationExpiryInvalid", "The invitation expiry is invalid.");
+    public static readonly Error InvitationReplacementInvalid = new("Organizations.InvitationReplacementInvalid", "The invitation replacement lineage is invalid.");
     public static readonly Error InvitationExpired = new("Organizations.InvitationExpired", "The invitation has expired.");
     public static readonly Error InvitationUnavailable = new("Organizations.InvitationUnavailable", "The invitation is no longer available.");
     public static readonly Error InvitationClaimedByAnotherSubject = new("Organizations.InvitationClaimedByAnotherSubject", "The invitation was already claimed by another subject.");
     public static readonly Error EnrollmentLinkIdRequired = new("Organizations.EnrollmentLinkIdRequired", "An enrollment link id is required.");
     public static readonly Error EnrollmentClaimIdRequired = new("Organizations.EnrollmentClaimIdRequired", "An enrollment claim id is required.");
     public static readonly Error EnrollmentConfigurationInvalid = new("Organizations.EnrollmentConfigurationInvalid", "The enrollment-link configuration is invalid.");
+    public static readonly Error EnrollmentLinkReplacementInvalid = new("Organizations.EnrollmentLinkReplacementInvalid", "The enrollment-link replacement lineage is invalid.");
     public static readonly Error EnrollmentLinkExpired = new("Organizations.EnrollmentLinkExpired", "The enrollment link has expired.");
     public static readonly Error EnrollmentLinkUnavailable = new("Organizations.EnrollmentLinkUnavailable", "The enrollment link is unavailable.");
     public static readonly Error EnrollmentLinkCapacityReached = new("Organizations.EnrollmentLinkCapacityReached", "The enrollment link has reached its claim limit.");

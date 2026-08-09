@@ -108,6 +108,57 @@ public sealed partial class OrganizationEnrollmentFlowTests
     }
 
     [Fact]
+    public async Task Rotation_is_idempotent_records_lineage_and_never_replays_the_secret()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        TestClock clock = new(Now);
+        using ServiceProvider services = CreateServices(repository, clock);
+        OrganizationEnrollmentLinkIssuedDto issued = await IssueAsync(
+            services,
+            repository,
+            OrganizationEnrollmentApprovalMode.RequiresApproval,
+            maximumClaims: 12);
+        Organization organization = Assert.Single(repository.Organizations);
+        var rotate = services.GetRequiredService<ICommandHandler<
+            RotateOrganizationEnrollmentLinkCommand,
+            OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>>();
+        Guid replacementId = Guid.NewGuid();
+        RotateOrganizationEnrollmentLinkCommand command = new(
+            organization.Id,
+            issued.EnrollmentLink.EnrollmentLinkId,
+            replacementId,
+            issued.EnrollmentLink.Version,
+            48,
+            "owner",
+            "user:owner");
+
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> first =
+            await rotate.HandleAsync(command, CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> replay =
+            await rotate.HandleAsync(command, CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> changed =
+            await rotate.HandleAsync(
+                command with { ReplacementLifetimeHours = 72 },
+                CancellationToken.None);
+
+        Assert.True(first.IsSuccess, first.Error.Code);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.Issued, first.Value.Outcome);
+        Assert.Equal(43, Assert.IsType<string>(first.Value.Token).Length);
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.AlreadyIssued, replay.Value.Outcome);
+        Assert.Null(replay.Value.Token);
+        Assert.Equal(OrganizationApplicationErrors.JoinSourceIssuanceConflict, changed.Error);
+        Assert.Equal(replacementId, first.Value.Source!.EnrollmentLinkId);
+        Assert.Equal(issued.EnrollmentLink.EnrollmentLinkId, first.Value.Source.ReplacesEnrollmentLinkId);
+        Assert.Equal(issued.EnrollmentLink.Version, first.Value.Source.ReplacesEnrollmentLinkVersion);
+        Assert.Equal(2, repository.EnrollmentLinks.Count);
+        Assert.Equal(
+            Gma.Modules.Organizations.Domain.Enums.OrganizationEnrollmentLinkState.Rotated,
+            repository.EnrollmentLinks.Single(
+                item => item.Id == issued.EnrollmentLink.EnrollmentLinkId).Status);
+    }
+
+    [Fact]
     public async Task Source_identity_cannot_be_reused_across_join_source_kinds()
     {
         TestOrganizationRepository repository = CreateRepository();
@@ -470,8 +521,12 @@ public sealed partial class OrganizationEnrollmentFlowTests
         using ServiceProvider services = CreateServices(repository, clock);
         OrganizationEnrollmentLinkIssuedDto issued = await IssueAsync(
             services, repository, OrganizationEnrollmentApprovalMode.Automatic, maximumClaims: 2);
-        var change = services.GetRequiredService<
-            ICommandHandler<ChangeOrganizationEnrollmentLinkCommand, OrganizationEnrollmentLinkMutationDto>>();
+        var rotate = services.GetRequiredService<ICommandHandler<
+            RotateOrganizationEnrollmentLinkCommand,
+            OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>>();
+        var disable = services.GetRequiredService<ICommandHandler<
+            DisableOrganizationEnrollmentLinkCommand,
+            OrganizationEnrollmentLinkDto>>();
         Organization organization = Assert.Single(repository.Organizations);
         OrganizationEnrollmentLink link = Assert.Single(repository.EnrollmentLinks);
         clock.UtcNow = Now.AddMinutes(1);
@@ -481,19 +536,18 @@ public sealed partial class OrganizationEnrollmentFlowTests
         Assert.True(organization.Archive(
             organization.Version, "user:owner", Guid.NewGuid(), clock.UtcNow).IsSuccess);
 
-        var replacement = await change.HandleAsync(new ChangeOrganizationEnrollmentLinkCommand(
-            organization.Id, link.Id, OrganizationEnrollmentLinkAction.Rotate,
+        var replacement = await rotate.HandleAsync(new RotateOrganizationEnrollmentLinkCommand(
+            organization.Id, link.Id, Guid.NewGuid(),
             issued.EnrollmentLink.Version, 24, "owner", "user:owner"), CancellationToken.None);
-        var disabled = await change.HandleAsync(new ChangeOrganizationEnrollmentLinkCommand(
-            organization.Id, link.Id, OrganizationEnrollmentLinkAction.Disable,
-            issued.EnrollmentLink.Version, null, "owner", "user:owner"), CancellationToken.None);
+        var disabled = await disable.HandleAsync(new DisableOrganizationEnrollmentLinkCommand(
+            organization.Id, link.Id, issued.EnrollmentLink.Version,
+            "owner", "user:owner"), CancellationToken.None);
 
         Assert.True(replacement.IsFailure);
         Assert.Equal(OrganizationDomainErrors.OrganizationNotActive, replacement.Error);
         Assert.True(disabled.IsSuccess);
         Assert.Single(repository.EnrollmentLinks);
-        Assert.Null(disabled.Value.ReplacementToken);
-        Assert.Equal(OrganizationEnrollmentLinkStatus.Disabled, disabled.Value.EnrollmentLink.Status);
+        Assert.Equal(OrganizationEnrollmentLinkStatus.Disabled, disabled.Value.Status);
     }
 
     private static async Task<OrganizationEnrollmentLinkIssuedDto> IssueAsync(

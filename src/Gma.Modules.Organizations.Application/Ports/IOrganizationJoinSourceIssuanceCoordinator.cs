@@ -13,4 +13,9 @@ public interface IOrganizationJoinSourceIssuanceCoordinator
         Guid organizationId,
         Guid sourceId,
         CancellationToken cancellationToken);
+
+    Task AcquireReplacementAsync(
+        Guid sourceId,
+        Guid replacementSourceId,
+        CancellationToken cancellationToken);
 }

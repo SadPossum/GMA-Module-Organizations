@@ -24,6 +24,8 @@ public sealed class OrganizationInvitation : AggregateRoot<Guid>
     public string? AcceptedSubjectId { get; private set; }
     public Guid? AcceptedMembershipId { get; private set; }
     public DateTimeOffset? AcceptedAtUtc { get; private set; }
+    public Guid? ReplacesInvitationId { get; private set; }
+    public long? ReplacesInvitationVersion { get; private set; }
     public long Version { get; private set; } = 1;
     public string CreatedBy { get; private set; } = string.Empty;
     public DateTimeOffset CreatedAtUtc { get; private set; }
@@ -39,7 +41,9 @@ public sealed class OrganizationInvitation : AggregateRoot<Guid>
         DateTimeOffset expiresAtUtc,
         string actorId,
         Guid eventId,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc,
+        Guid? replacesInvitationId = null,
+        long? replacesInvitationVersion = null)
     {
         if (id == Guid.Empty)
         {
@@ -49,6 +53,15 @@ public sealed class OrganizationInvitation : AggregateRoot<Guid>
         if (organizationId == Guid.Empty)
         {
             return Result.Failure<OrganizationInvitation>(OrganizationDomainErrors.OrganizationIdRequired);
+        }
+
+        if (!IsValidReplacement(
+                id,
+                replacesInvitationId,
+                replacesInvitationVersion))
+        {
+            return Result.Failure<OrganizationInvitation>(
+                OrganizationDomainErrors.InvitationReplacementInvalid);
         }
 
         Result<OrganizationSubjectId> inviter = OrganizationSubjectId.Create(inviterSubjectId);
@@ -73,6 +86,8 @@ public sealed class OrganizationInvitation : AggregateRoot<Guid>
             TokenDigest = tokenDigest.ToLowerInvariant(),
             ExpiresAtUtc = expiresAtUtc,
             Status = OrganizationInvitationState.Pending,
+            ReplacesInvitationId = replacesInvitationId,
+            ReplacesInvitationVersion = replacesInvitationVersion,
             CreatedBy = actor.Value.Value,
             CreatedAtUtc = nowUtc,
             LastChangedBy = actor.Value.Value,
@@ -232,4 +247,14 @@ public sealed class OrganizationInvitation : AggregateRoot<Guid>
 
     private static bool IsValidDigest(string? value) => value is { Length: TokenDigestLength } &&
         value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F');
+
+    private static bool IsValidReplacement(
+        Guid invitationId,
+        Guid? replacesInvitationId,
+        long? replacesInvitationVersion) =>
+        replacesInvitationId is null && replacesInvitationVersion is null ||
+        replacesInvitationId is { } predecessorId &&
+        predecessorId != Guid.Empty &&
+        predecessorId != invitationId &&
+        replacesInvitationVersion is > 0;
 }

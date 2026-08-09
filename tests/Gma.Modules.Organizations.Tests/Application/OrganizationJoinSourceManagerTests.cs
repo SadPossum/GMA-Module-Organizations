@@ -34,12 +34,11 @@ public sealed class OrganizationJoinSourceManagerTests
                 Status = OrganizationInvitationStatus.Revoked,
                 Version = invitation.Version + 1
             }),
-            ChangeOrganizationEnrollmentLinkCommand => Result.Success(
-                new OrganizationEnrollmentLinkMutationDto(link with
-                {
-                    Status = OrganizationEnrollmentLinkStatus.Disabled,
-                    Version = link.Version + 1
-                }, null)),
+            DisableOrganizationEnrollmentLinkCommand => Result.Success(link with
+            {
+                Status = OrganizationEnrollmentLinkStatus.Disabled,
+                Version = link.Version + 1
+            }),
             _ => throw new InvalidOperationException($"Unexpected request {request.GetType().Name}.")
         });
         OrganizationJoinSourceManager manager = new(dispatcher);
@@ -77,10 +76,9 @@ public sealed class OrganizationJoinSourceManagerTests
             request => Assert.IsType<RevokeOrganizationInvitationCommand>(request),
             request =>
             {
-                ChangeOrganizationEnrollmentLinkCommand command =
-                    Assert.IsType<ChangeOrganizationEnrollmentLinkCommand>(request);
-                Assert.Equal(OrganizationEnrollmentLinkAction.Disable, command.Action);
-                Assert.Null(command.ReplacementLifetimeHours);
+                DisableOrganizationEnrollmentLinkCommand command =
+                    Assert.IsType<DisableOrganizationEnrollmentLinkCommand>(request);
+                Assert.Equal(EnrollmentLinkId, command.EnrollmentLinkId);
             });
     }
 

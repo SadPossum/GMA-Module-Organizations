@@ -63,8 +63,8 @@ internal static class OrganizationEnrollmentEndpoints
         }).Produces<OrganizationEnrollmentLinkIssuanceDto>(StatusCodes.Status200OK);
         OrganizationEndpointSupport.RequireAssuranceWhenConfigured(createLink, governanceAssurance);
 
-        MapLinkAction(organizations, "disable", OrganizationEnrollmentLinkAction.Disable, governanceAssurance);
-        MapLinkAction(organizations, "rotate", OrganizationEnrollmentLinkAction.Rotate, governanceAssurance);
+        MapDisableLink(organizations, governanceAssurance);
+        MapRotateLink(organizations, governanceAssurance);
 
         organizations.MapGet("/{organizationId:guid}/join-requests", async (
             Guid organizationId, int? page, int? pageSize, HttpContext context,
@@ -117,15 +117,37 @@ internal static class OrganizationEnrollmentEndpoints
             .RequireAuthorization();
     }
 
-    private static void MapLinkAction(
+    private static void MapDisableLink(
         RouteGroupBuilder organizations,
-        string route,
-        OrganizationEnrollmentLinkAction action,
         AuthenticationAssuranceRequirement? governanceAssurance)
     {
-        RouteHandlerBuilder endpoint = organizations.MapPost($"/{{organizationId:guid}}/enrollment-links/{{enrollmentLinkId:guid}}/{route}",
+        RouteHandlerBuilder endpoint = organizations.MapPost(
+            "/{organizationId:guid}/enrollment-links/{enrollmentLinkId:guid}/disable",
             async (Guid organizationId, Guid enrollmentLinkId,
-                ChangeOrganizationEnrollmentLinkRequest request, HttpContext context,
+                DisableOrganizationEnrollmentLinkRequest request, HttpContext context,
+                IRequestDispatcher dispatcher, CancellationToken token) =>
+            {
+                if (!OrganizationEndpointSupport.TryGetSubject(context, out string subjectId))
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await dispatcher.SendAsync(new DisableOrganizationEnrollmentLinkCommand(
+                    organizationId, enrollmentLinkId, request.ExpectedVersion, subjectId,
+                    OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
+                    .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
+            }).Produces<OrganizationEnrollmentLinkDto>(StatusCodes.Status200OK);
+        OrganizationEndpointSupport.RequireAssuranceWhenConfigured(endpoint, governanceAssurance);
+    }
+
+    private static void MapRotateLink(
+        RouteGroupBuilder organizations,
+        AuthenticationAssuranceRequirement? governanceAssurance)
+    {
+        RouteHandlerBuilder endpoint = organizations.MapPost(
+            "/{organizationId:guid}/enrollment-links/{enrollmentLinkId:guid}/rotate",
+            async (Guid organizationId, Guid enrollmentLinkId,
+                RotateOrganizationEnrollmentLinkRequest request, HttpContext context,
                 IRequestDispatcher dispatcher, CancellationToken token) =>
             {
                 OrganizationEndpointSupport.SetNoStoreHeaders(context);
@@ -134,12 +156,18 @@ internal static class OrganizationEnrollmentEndpoints
                     return Results.Unauthorized();
                 }
 
-                return (await dispatcher.SendAsync(new ChangeOrganizationEnrollmentLinkCommand(
-                    organizationId, enrollmentLinkId, action, request.ExpectedVersion,
-                    request.ReplacementLifetimeHours, subjectId,
-                    OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
+                Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> result =
+                    await dispatcher.SendAsync(new RotateOrganizationEnrollmentLinkCommand(
+                        organizationId,
+                        enrollmentLinkId,
+                        request.ReplacementSourceId,
+                        request.ExpectedVersion,
+                        request.ReplacementLifetimeHours,
+                        subjectId,
+                        OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false);
+                return OrganizationEndpointSupport.MapEnrollmentLinkIssuance(result)
                     .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-            }).Produces<OrganizationEnrollmentLinkMutationDto>(StatusCodes.Status200OK);
+            }).Produces<OrganizationEnrollmentLinkIssuanceDto>(StatusCodes.Status200OK);
         OrganizationEndpointSupport.RequireAssuranceWhenConfigured(endpoint, governanceAssurance);
     }
 

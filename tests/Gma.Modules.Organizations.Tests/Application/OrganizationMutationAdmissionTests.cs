@@ -236,7 +236,9 @@ public sealed class OrganizationMutationAdmissionTests
             IssueOrganizationInvitationCommand,
             OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
         var reissue = fixture.Services.GetRequiredService<
-            ICommandHandler<ReissueOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
+            ICommandHandler<
+                ReissueOrganizationInvitationCommand,
+                OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
         OrganizationJoinSourceIssuance<OrganizationInvitationDto> issued =
             (await issue.HandleAsync(
                 new IssueOrganizationInvitationCommand(
@@ -251,23 +253,85 @@ public sealed class OrganizationMutationAdmissionTests
         OrganizationInvitation invitation = Assert.Single(fixture.Repository.Invitations);
         policy.Contexts.Clear();
         policy.Decision = OrganizationMutationAdmissionDecision.Denied;
+        Guid replacementId = Guid.NewGuid();
+        ReissueOrganizationInvitationCommand command = new(
+            fixture.Organization.Id,
+            invitation.Id,
+            replacementId,
+            issued.Source!.Version,
+            24,
+            "owner",
+            "user:owner");
 
-        Result<OrganizationInvitationIssuedDto> result = await reissue.HandleAsync(
-            new ReissueOrganizationInvitationCommand(
-                fixture.Organization.Id,
-                invitation.Id,
-                issued.Source!.Version,
-                24,
-                "owner",
-                "user:owner"),
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> result = await reissue.HandleAsync(
+            command,
             CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(DomainInvitationState.Pending, invitation.Status);
         Assert.Single(fixture.Repository.Invitations);
+        Assert.DoesNotContain(fixture.Repository.Invitations, item => item.Id == replacementId);
         OrganizationMutationAdmissionContext context = Assert.Single(policy.Contexts);
         Assert.Equal(OrganizationMutationAdmissionOperation.ReissueInvitation, context.Operation);
         Assert.Equal(invitation.Id, context.TargetId);
+
+        policy.Decision = OrganizationMutationAdmissionDecision.Allowed;
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> retry =
+            await reissue.HandleAsync(command, CancellationToken.None);
+
+        Assert.True(retry.IsSuccess, retry.Error.Code);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.Issued, retry.Value.Outcome);
+        Assert.Equal(replacementId, retry.Value.Source!.InvitationId);
+        Assert.Equal(2, fixture.Repository.Invitations.Count);
+    }
+
+    [Fact]
+    public async Task Exact_reissue_retry_does_not_rerun_product_admission()
+    {
+        RecordingMutationPolicy policy = new();
+        using Fixture fixture = CreateFixture(policy);
+        var issue = fixture.Services.GetRequiredService<ICommandHandler<
+            IssueOrganizationInvitationCommand,
+            OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
+        var reissue = fixture.Services.GetRequiredService<ICommandHandler<
+            ReissueOrganizationInvitationCommand,
+            OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
+        OrganizationJoinSourceIssuance<OrganizationInvitationDto> issued =
+            (await issue.HandleAsync(
+                new IssueOrganizationInvitationCommand(
+                    new OrganizationInvitationIssuanceRequest(
+                        Guid.NewGuid(),
+                        fixture.Organization.Id,
+                        null,
+                        24,
+                        "owner",
+                        "user:owner")),
+                CancellationToken.None)).Value;
+        Guid replacementId = Guid.NewGuid();
+        ReissueOrganizationInvitationCommand command = new(
+            fixture.Organization.Id,
+            issued.Source!.InvitationId,
+            replacementId,
+            issued.Source.Version,
+            24,
+            "owner",
+            "user:owner");
+        policy.Contexts.Clear();
+
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> first =
+            await reissue.HandleAsync(command, CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error.Code);
+        Assert.Single(policy.Contexts);
+        policy.Contexts.Clear();
+        policy.Decision = OrganizationMutationAdmissionDecision.Denied;
+
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> replay =
+            await reissue.HandleAsync(command, CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.AlreadyIssued, replay.Value.Outcome);
+        Assert.Null(replay.Value.Token);
+        Assert.Empty(policy.Contexts);
     }
 
     [Fact]
@@ -307,8 +371,12 @@ public sealed class OrganizationMutationAdmissionTests
         var issue = fixture.Services.GetRequiredService<ICommandHandler<
             IssueOrganizationEnrollmentLinkCommand,
             OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>>();
-        var change = fixture.Services.GetRequiredService<
-            ICommandHandler<ChangeOrganizationEnrollmentLinkCommand, OrganizationEnrollmentLinkMutationDto>>();
+        var rotate = fixture.Services.GetRequiredService<ICommandHandler<
+            RotateOrganizationEnrollmentLinkCommand,
+            OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>>();
+        var disable = fixture.Services.GetRequiredService<ICommandHandler<
+            DisableOrganizationEnrollmentLinkCommand,
+            OrganizationEnrollmentLinkDto>>();
         OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto> issued =
             (await issue.HandleAsync(
                 new IssueOrganizationEnrollmentLinkCommand(
@@ -325,29 +393,28 @@ public sealed class OrganizationMutationAdmissionTests
         policy.Contexts.Clear();
         policy.Decision = OrganizationMutationAdmissionDecision.Denied;
 
-        Result<OrganizationEnrollmentLinkMutationDto> rotate = await change.HandleAsync(
-            new ChangeOrganizationEnrollmentLinkCommand(
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> rotation =
+            await rotate.HandleAsync(
+            new RotateOrganizationEnrollmentLinkCommand(
                 fixture.Organization.Id,
                 link.Id,
-                OrganizationEnrollmentLinkAction.Rotate,
+                Guid.NewGuid(),
                 issued.Source!.Version,
                 24,
                 "owner",
                 "user:owner"),
             CancellationToken.None);
-        Result<OrganizationEnrollmentLinkMutationDto> disable = await change.HandleAsync(
-            new ChangeOrganizationEnrollmentLinkCommand(
+        Result<OrganizationEnrollmentLinkDto> disablement = await disable.HandleAsync(
+            new DisableOrganizationEnrollmentLinkCommand(
                 fixture.Organization.Id,
                 link.Id,
-                OrganizationEnrollmentLinkAction.Disable,
                 issued.Source!.Version,
-                null,
                 "owner",
                 "user:owner"),
             CancellationToken.None);
 
-        Assert.True(rotate.IsFailure);
-        Assert.True(disable.IsSuccess);
+        Assert.True(rotation.IsFailure);
+        Assert.True(disablement.IsSuccess);
         Assert.Equal(DomainEnrollmentLinkState.Disabled, link.Status);
         Assert.Single(fixture.Repository.EnrollmentLinks);
         OrganizationMutationAdmissionContext context = Assert.Single(policy.Contexts);

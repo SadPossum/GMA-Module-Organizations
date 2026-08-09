@@ -14,20 +14,20 @@ using Gma.Modules.Organizations.Domain.Enums;
 using Gma.Modules.Organizations.Domain.ValueObjects;
 using Microsoft.Extensions.Options;
 
-internal sealed class ReissueOrganizationInvitationCommandHandler(
+internal sealed class RotateOrganizationEnrollmentLinkCommandHandler(
     IOrganizationRepository organizations,
     IOrganizationJoinSourceIssuanceCoordinator issuance,
     OrganizationJoinSourceAuthorization joinSourceAuthorization,
     OrganizationMutationAdmissionPolicy mutationAdmission,
-    IOrganizationInvitationTokenService tokens,
+    IOrganizationEnrollmentTokenService tokens,
     IOptions<OrganizationsOptions> options,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<
-        ReissueOrganizationInvitationCommand,
-        OrganizationJoinSourceIssuance<OrganizationInvitationDto>>
+        RotateOrganizationEnrollmentLinkCommand,
+        OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>
 {
-    public async Task<Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>>> HandleAsync(
-        ReissueOrganizationInvitationCommand command,
+    public async Task<Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>> HandleAsync(
+        RotateOrganizationEnrollmentLinkCommand command,
         CancellationToken cancellationToken)
     {
         if (command.ReplacementSourceId == Guid.Empty)
@@ -35,15 +35,15 @@ internal sealed class ReissueOrganizationInvitationCommandHandler(
             return Failure(OrganizationApplicationErrors.JoinSourceIdRequired);
         }
 
-        if (command.ReplacementSourceId == command.InvitationId)
+        if (command.ReplacementSourceId == command.EnrollmentLinkId)
         {
             return Failure(OrganizationApplicationErrors.JoinSourceIssuanceConflict);
         }
 
         Result<OrganizationSubjectId> subject = OrganizationSubjectId.Create(command.SubjectId);
         Result<OrganizationActorId> actor = OrganizationActorId.Create(command.ActorId);
-        Result<int> lifetime = OrganizationInvitationHandlerSupport.ResolveLifetimeHours(
-            command.LifetimeHours,
+        Result<int> lifetime = OrganizationEnrollmentHandlerSupport.ResolveLifetimeHours(
+            command.ReplacementLifetimeHours,
             options);
         if (subject.IsFailure || actor.IsFailure || lifetime.IsFailure)
         {
@@ -54,10 +54,10 @@ internal sealed class ReissueOrganizationInvitationCommandHandler(
 
         Result authorized = await joinSourceAuthorization.AuthorizeAsync(
             new OrganizationJoinSourceAuthorizationContext(
-                OrganizationJoinSourceAuthorizationOperation.ReissueInvitation,
+                OrganizationJoinSourceAuthorizationOperation.RotateEnrollmentLink,
                 command.OrganizationId,
                 subject.Value.Value,
-                command.InvitationId),
+                command.EnrollmentLinkId),
             cancellationToken).ConfigureAwait(false);
         if (authorized.IsFailure)
         {
@@ -76,28 +76,28 @@ internal sealed class ReissueOrganizationInvitationCommandHandler(
         }
 
         await issuance.AcquireReplacementAsync(
-            command.InvitationId,
+            command.EnrollmentLinkId,
             command.ReplacementSourceId,
             cancellationToken).ConfigureAwait(false);
 
         DateTimeOffset nowUtc = clock.UtcNow;
-        OrganizationInvitation? replacement = await organizations.GetInvitationAsync(
+        OrganizationEnrollmentLink? replacement = await organizations.GetEnrollmentLinkAsync(
             command.OrganizationId,
             command.ReplacementSourceId,
             cancellationToken).ConfigureAwait(false);
         if (replacement is not null)
         {
             bool exactReplay =
-                replacement.ReplacesInvitationId == command.InvitationId &&
-                replacement.ReplacesInvitationVersion == command.ExpectedVersion &&
+                replacement.ReplacesEnrollmentLinkId == command.EnrollmentLinkId &&
+                replacement.ReplacesEnrollmentLinkVersion == command.ExpectedVersion &&
                 string.Equals(
-                    replacement.InviterSubjectId,
+                    replacement.CreatorSubjectId,
                     subject.Value.Value,
                     StringComparison.Ordinal) &&
                 string.Equals(replacement.CreatedBy, actor.Value.Value, StringComparison.Ordinal) &&
                 replacement.ExpiresAtUtc == replacement.CreatedAtUtc.AddHours(lifetime.Value);
             return exactReplay
-                ? Result.Success(new OrganizationJoinSourceIssuance<OrganizationInvitationDto>(
+                ? Result.Success(new OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>(
                     replacement.ToDto(nowUtc),
                     OrganizationJoinSourceIssuanceOutcome.AlreadyIssued,
                     null,
@@ -105,55 +105,56 @@ internal sealed class ReissueOrganizationInvitationCommandHandler(
                 : Failure(OrganizationApplicationErrors.JoinSourceIssuanceConflict);
         }
 
-        if (await organizations.InvitationIdExistsAsync(
+        if (await organizations.EnrollmentLinkIdExistsAsync(
                 command.ReplacementSourceId,
                 cancellationToken).ConfigureAwait(false) ||
-            await organizations.EnrollmentLinkIdExistsAsync(
+            await organizations.InvitationIdExistsAsync(
                 command.ReplacementSourceId,
                 cancellationToken).ConfigureAwait(false))
         {
             return Failure(OrganizationApplicationErrors.JoinSourceIssuanceConflict);
         }
 
-        OrganizationInvitation? predecessor = await organizations.GetInvitationAsync(
+        OrganizationEnrollmentLink? predecessor = await organizations.GetEnrollmentLinkAsync(
             command.OrganizationId,
-            command.InvitationId,
+            command.EnrollmentLinkId,
             cancellationToken).ConfigureAwait(false);
         if (predecessor is null)
         {
-            return Failure(OrganizationApplicationErrors.InvitationNotFound);
+            return Failure(OrganizationApplicationErrors.EnrollmentLinkNotFound);
         }
 
         Result admitted = await mutationAdmission.AuthorizeAsync(
             new OrganizationMutationAdmissionContext(
-                OrganizationMutationAdmissionOperation.ReissueInvitation,
+                OrganizationMutationAdmissionOperation.RotateEnrollmentLink,
                 command.OrganizationId,
                 subject.Value.Value,
-                command.InvitationId),
+                command.EnrollmentLinkId),
             cancellationToken).ConfigureAwait(false);
         if (admitted.IsFailure)
         {
             return Failure(admitted.Error);
         }
 
-        Result superseded = predecessor.Supersede(
+        Result rotated = predecessor.Rotate(
             command.ExpectedVersion,
             actor.Value.Value,
             ids.NewId(),
             nowUtc);
-        if (superseded.IsFailure)
+        if (rotated.IsFailure)
         {
-            return Failure(superseded.Error);
+            return Failure(rotated.Error);
         }
 
-        IssuedOrganizationInvitationToken issued = tokens.Issue();
-        Result<OrganizationInvitation> created = OrganizationInvitation.Create(
+        IssuedOrganizationEnrollmentToken issued = tokens.Issue();
+        Result<OrganizationEnrollmentLink> created = OrganizationEnrollmentLink.Create(
             command.ReplacementSourceId,
             predecessor.OrganizationId,
             subject.Value.Value,
-            predecessor.RecipientEmail,
             issued.Digest,
             nowUtc.AddHours(lifetime.Value),
+            predecessor.MaximumClaims,
+            predecessor.ApprovalMode,
             actor.Value.Value,
             ids.NewId(),
             nowUtc,
@@ -164,17 +165,17 @@ internal sealed class ReissueOrganizationInvitationCommandHandler(
             return Failure(created.Error);
         }
 
-        await organizations.AddInvitationAsync(
+        await organizations.AddEnrollmentLinkAsync(
             created.Value,
             cancellationToken).ConfigureAwait(false);
-        return Result.Success(new OrganizationJoinSourceIssuance<OrganizationInvitationDto>(
+        return Result.Success(new OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>(
             created.Value.ToDto(nowUtc),
             OrganizationJoinSourceIssuanceOutcome.Issued,
             issued.Secret,
             null));
     }
 
-    private static Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> Failure(
+    private static Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> Failure(
         Error error) => Result.Failure<
-            OrganizationJoinSourceIssuance<OrganizationInvitationDto>>(error);
+            OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>(error);
 }

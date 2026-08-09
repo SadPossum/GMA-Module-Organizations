@@ -24,6 +24,8 @@ public sealed class OrganizationEnrollmentLink : AggregateRoot<Guid>
     public int ReservedClaims { get; private set; }
     public OrganizationEnrollmentApprovalMode ApprovalMode { get; private set; }
     public OrganizationEnrollmentLinkState Status { get; private set; }
+    public Guid? ReplacesEnrollmentLinkId { get; private set; }
+    public long? ReplacesEnrollmentLinkVersion { get; private set; }
     public long Version { get; private set; } = 1;
     public string CreatedBy { get; private set; } = string.Empty;
     public DateTimeOffset CreatedAtUtc { get; private set; }
@@ -40,11 +42,22 @@ public sealed class OrganizationEnrollmentLink : AggregateRoot<Guid>
         OrganizationEnrollmentApprovalMode approvalMode,
         string actorId,
         Guid eventId,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc,
+        Guid? replacesEnrollmentLinkId = null,
+        long? replacesEnrollmentLinkVersion = null)
     {
         if (id == Guid.Empty)
         {
             return Result.Failure<OrganizationEnrollmentLink>(OrganizationDomainErrors.EnrollmentLinkIdRequired);
+        }
+
+        if (!IsValidReplacement(
+                id,
+                replacesEnrollmentLinkId,
+                replacesEnrollmentLinkVersion))
+        {
+            return Result.Failure<OrganizationEnrollmentLink>(
+                OrganizationDomainErrors.EnrollmentLinkReplacementInvalid);
         }
 
         Result<OrganizationSubjectId> creator = OrganizationSubjectId.Create(creatorSubjectId);
@@ -69,6 +82,8 @@ public sealed class OrganizationEnrollmentLink : AggregateRoot<Guid>
             MaximumClaims = maximumClaims,
             ApprovalMode = approvalMode,
             Status = OrganizationEnrollmentLinkState.Active,
+            ReplacesEnrollmentLinkId = replacesEnrollmentLinkId,
+            ReplacesEnrollmentLinkVersion = replacesEnrollmentLinkVersion,
             CreatedBy = actor.Value.Value,
             CreatedAtUtc = nowUtc,
             LastChangedBy = actor.Value.Value,
@@ -220,4 +235,14 @@ public sealed class OrganizationEnrollmentLink : AggregateRoot<Guid>
 
     private static bool IsValidDigest(string? value) => value is { Length: TokenDigestLength } &&
         value.All(character => character is >= '0' and <= '9' or >= 'a' and <= 'f' or >= 'A' and <= 'F');
+
+    private static bool IsValidReplacement(
+        Guid enrollmentLinkId,
+        Guid? replacesEnrollmentLinkId,
+        long? replacesEnrollmentLinkVersion) =>
+        replacesEnrollmentLinkId is null && replacesEnrollmentLinkVersion is null ||
+        replacesEnrollmentLinkId is { } predecessorId &&
+        predecessorId != Guid.Empty &&
+        predecessorId != enrollmentLinkId &&
+        replacesEnrollmentLinkVersion is > 0;
 }

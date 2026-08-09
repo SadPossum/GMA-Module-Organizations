@@ -10,7 +10,15 @@ internal sealed class OrganizationEnrollmentLinkConfiguration
 {
     public void Configure(EntityTypeBuilder<OrganizationEnrollmentLink> builder)
     {
-        builder.ToTable("organization_enrollment_links");
+        builder.ToTable(
+            "organization_enrollment_links",
+            table => table.HasCheckConstraint(
+                "CK_organization_enrollment_links_replacement_lineage",
+                "(\"ReplacesEnrollmentLinkId\" IS NULL AND " +
+                "\"ReplacesEnrollmentLinkVersion\" IS NULL) OR " +
+                "(\"ReplacesEnrollmentLinkId\" IS NOT NULL AND " +
+                "\"ReplacesEnrollmentLinkId\" <> \"Id\" AND " +
+                "\"ReplacesEnrollmentLinkVersion\" > 0)"));
         builder.HasKey(link => link.Id);
         builder.Ignore(link => link.DomainEvents);
         builder.Property(link => link.CreatorSubjectId)
@@ -30,6 +38,7 @@ internal sealed class OrganizationEnrollmentLinkConfiguration
             .HasMaxLength(OrganizationActorId.MaxLength)
             .IsRequired();
         builder.HasIndex(link => link.TokenDigest).IsUnique();
+        builder.HasIndex(link => link.ReplacesEnrollmentLinkId).IsUnique();
         builder.HasIndex(link => new { link.OrganizationId, link.Status, link.CreatedAtUtc });
         builder.HasIndex(link => new { link.Status, link.ExpiresAtUtc });
         builder.HasIndex(link => new { link.Status, link.LastChangedAtUtc });

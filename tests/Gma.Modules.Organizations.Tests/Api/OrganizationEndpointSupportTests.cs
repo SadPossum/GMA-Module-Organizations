@@ -36,7 +36,10 @@ public sealed class OrganizationEndpointSupportTests
         AssertAssurance(endpoints, HttpMethods.Post, "/api/organizations/{organizationId:guid}/members/suspend", expected: true);
         AssertAssurance(endpoints, HttpMethods.Post, "/api/organizations/{organizationId:guid}/ownership/transfer", expected: true);
         AssertAssurance(endpoints, HttpMethods.Post, "/api/organizations/{organizationId:guid}/invitations", expected: true);
+        AssertAssurance(endpoints, HttpMethods.Post, "/api/organizations/{organizationId:guid}/invitations/{invitationId:guid}/reissue", expected: true);
         AssertAssurance(endpoints, HttpMethods.Post, "/api/organizations/{organizationId:guid}/enrollment-links", expected: true);
+        AssertAssurance(endpoints, HttpMethods.Post, "/api/organizations/{organizationId:guid}/enrollment-links/{enrollmentLinkId:guid}/disable", expected: true);
+        AssertAssurance(endpoints, HttpMethods.Post, "/api/organizations/{organizationId:guid}/enrollment-links/{enrollmentLinkId:guid}/rotate", expected: true);
         AssertAssurance(endpoints, HttpMethods.Get, "/api/organizations/{organizationId:guid}/members", expected: false);
         AssertAssurance(endpoints, HttpMethods.Post, "/api/organization-invitations/accept", expected: false);
         AssertAssurance(endpoints, HttpMethods.Post, "/api/organization-enrollment/claim", expected: false);

@@ -11,4 +11,6 @@ public sealed record OrganizationInvitationDto(
     Guid? AcceptedMembershipId,
     long Version,
     DateTimeOffset CreatedAtUtc,
-    DateTimeOffset LastChangedAtUtc);
+    DateTimeOffset LastChangedAtUtc,
+    Guid? ReplacesInvitationId = null,
+    long? ReplacesInvitationVersion = null);
