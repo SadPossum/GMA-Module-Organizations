@@ -46,6 +46,8 @@ Transaction-stable lifecycle and membership authorization is tracked in
 [Organizations Governance Transaction Consistency Task](organizations-governance-transaction-consistency-task.md).
 Single-winner coordination across invitation and enrollment paths is tracked in
 [Organizations Join-Subject Consistency Task](organizations-join-subject-consistency-task.md).
+Terminal approval and rejection replay semantics are tracked in
+[Organizations Join-Request Resolution Retry Safety Task](organizations-join-request-resolution-retry-safety-task.md).
 Cross-provider ordinal storage for case-preserving subject and actor identifiers
 is tracked in
 [Organizations Ordinal Identity Storage Task](organizations-ordinal-identity-storage-task.md).
@@ -137,6 +139,12 @@ per-organization, per-subject transaction fence. An exact source replay remains
 idempotent, while one current pending enrollment request wins over competing
 links or invitation acceptance without consuming another source or reserving
 more capacity. Unrelated subjects continue concurrently.
+
+Approval-required join decisions are retry-safe after a committed response is
+lost. The same decision with the immediately preceding claim version returns
+the persisted terminal outcome after current resolver authorization. Approval
+replay requires the exact active correlated membership and never reruns product
+admission; rejection replay never releases capacity twice.
 
 Self-service organization creation requires a caller-owned non-empty operation
 id. Keep that id for retries of the same normalized name and slug; exact

@@ -65,6 +65,16 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
                 OrganizationApplicationErrors.EnrollmentDecisionInvalid);
         }
 
+        if (IsExactTerminalReplay(command, claim))
+        {
+            return command.Decision == OrganizationJoinRequestDecision.Reject
+                ? Result.Success(new OrganizationEnrollmentOutcomeDto(claim.ToDto(), null))
+                : await this.ReplayApprovalAsync(
+                    command.OrganizationId,
+                    claim,
+                    cancellationToken).ConfigureAwait(false);
+        }
+
         DateTimeOffset nowUtc = clock.UtcNow;
         if (claim.IsDecisionDue(nowUtc))
         {
@@ -151,10 +161,31 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
             membership.Value.Id, command.ExpectedClaimVersion,
             command.ActorId, ids.NewId(), nowUtc);
         return approved.IsSuccess
-            ? Result.Success(new OrganizationEnrollmentOutcomeDto(
-                claim.ToDto(), new OrganizationMembershipSummaryDto(
-                    organization.ToDto(), membership.Value.ToDto())))
+            ? Result.Success(ToOutcome(claim, organization, membership.Value))
             : Result.Failure<OrganizationEnrollmentOutcomeDto>(approved.Error);
+    }
+
+    private async Task<Result<OrganizationEnrollmentOutcomeDto>> ReplayApprovalAsync(
+        Guid organizationId,
+        OrganizationEnrollmentClaim claim,
+        CancellationToken cancellationToken)
+    {
+        Organization? organization = await organizations.GetOrganizationAsync(
+            organizationId, cancellationToken).ConfigureAwait(false);
+        if (organization is not { Status: OrganizationState.Active })
+        {
+            return Result.Failure<OrganizationEnrollmentOutcomeDto>(organization is null
+                ? OrganizationApplicationErrors.OrganizationNotFound
+                : Gma.Modules.Organizations.Domain.Errors.OrganizationDomainErrors.OrganizationNotActive);
+        }
+
+        OrganizationMembership? membership = await organizations.GetMembershipAsync(
+            organizationId, claim.SubjectId, cancellationToken).ConfigureAwait(false);
+        return membership is { Status: OrganizationMembershipState.Active } &&
+               claim.MembershipId == membership.Id
+            ? Result.Success(ToOutcome(claim, organization, membership))
+            : Result.Failure<OrganizationEnrollmentOutcomeDto>(
+                OrganizationApplicationErrors.MembershipConflict);
     }
 
     private Result<OrganizationEnrollmentOutcomeDto> Reject(
@@ -181,4 +212,21 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
             ? Result.Success(new OrganizationEnrollmentOutcomeDto(claim.ToDto(), null))
             : Result.Failure<OrganizationEnrollmentOutcomeDto>(released.Error);
     }
+
+    private static bool IsExactTerminalReplay(
+        ResolveOrganizationJoinRequestCommand command,
+        OrganizationEnrollmentClaim claim) =>
+        claim.Version > 1 &&
+        command.ExpectedClaimVersion == claim.Version - 1 &&
+        ((command.Decision == OrganizationJoinRequestDecision.Approve &&
+          claim.Status == OrganizationEnrollmentClaimState.Accepted) ||
+         (command.Decision == OrganizationJoinRequestDecision.Reject &&
+          claim.Status == OrganizationEnrollmentClaimState.Rejected));
+
+    private static OrganizationEnrollmentOutcomeDto ToOutcome(
+        OrganizationEnrollmentClaim claim,
+        Organization organization,
+        OrganizationMembership membership) => new(
+        claim.ToDto(),
+        new OrganizationMembershipSummaryDto(organization.ToDto(), membership.ToDto()));
 }

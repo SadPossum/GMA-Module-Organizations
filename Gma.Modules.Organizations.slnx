@@ -30,6 +30,7 @@
     <File Path="docs/organizations-creation-idempotency-task.md" />
     <File Path="docs/organizations-enrollment-claim-inspection-task.md" />
     <File Path="docs/organizations-governance-transaction-consistency-task.md" />
+    <File Path="docs/organizations-join-request-resolution-retry-safety-task.md" />
     <File Path="docs/organizations-join-source-issuance-task.md" />
     <File Path="docs/organizations-join-source-management-task.md" />
     <File Path="docs/organizations-join-source-replacement-retry-safety-task.md" />

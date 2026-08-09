@@ -292,11 +292,17 @@ public sealed partial class OrganizationEnrollmentFlowTests
             services, repository, OrganizationEnrollmentApprovalMode.Automatic, maximumClaims: 2);
         var claim = services.GetRequiredService<
             ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>>();
+        var resolve = services.GetRequiredService<
+            ICommandHandler<ResolveOrganizationJoinRequestCommand, OrganizationEnrollmentOutcomeDto>>();
 
         var first = await claim.HandleAsync(new ClaimOrganizationEnrollmentLinkCommand(
             issued.Token, "member", "user:member"), CancellationToken.None);
         var retry = await claim.HandleAsync(new ClaimOrganizationEnrollmentLinkCommand(
             issued.Token, "member", "user:member"), CancellationToken.None);
+        Organization organization = Assert.Single(repository.Organizations);
+        var ownerApproval = await resolve.HandleAsync(new ResolveOrganizationJoinRequestCommand(
+            organization.Id, first.Value.Claim.ClaimId, OrganizationJoinRequestDecision.Approve,
+            first.Value.Claim.Version, "owner", "user:owner"), CancellationToken.None);
 
         Assert.True(first.IsSuccess);
         Assert.True(retry.IsSuccess);
@@ -305,6 +311,7 @@ public sealed partial class OrganizationEnrollmentFlowTests
         Assert.NotNull(first.Value.Membership);
         Assert.Single(repository.Memberships, item => item.SubjectId == "member");
         Assert.Equal(1, Assert.Single(repository.EnrollmentLinks).ReservedClaims);
+        Assert.Equal(OrganizationApplicationErrors.EnrollmentClaimUnavailable, ownerApproval.Error);
     }
 
     [Fact]
@@ -336,6 +343,93 @@ public sealed partial class OrganizationEnrollmentFlowTests
         Assert.Equal(OrganizationEnrollmentClaimStatus.Accepted, approved.Value.Claim.Status);
         Assert.Equal(OrganizationMembershipRole.Member, approved.Value.Membership!.Membership.Role);
         Assert.Single(repository.Memberships, item => item.SubjectId == "member");
+    }
+
+    [Fact]
+    public async Task Approval_retry_returns_the_committed_outcome_without_rerunning_product_admission()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        RecordingJoinPolicy policy = new();
+        using ServiceProvider services = CreateServices(
+            repository, new TestClock(Now), policy);
+        OrganizationEnrollmentLinkIssuedDto issued = await IssueAsync(
+            services, repository, OrganizationEnrollmentApprovalMode.RequiresApproval, maximumClaims: 1);
+        var claimHandler = services.GetRequiredService<
+            ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>>();
+        var resolveHandler = services.GetRequiredService<
+            ICommandHandler<ResolveOrganizationJoinRequestCommand, OrganizationEnrollmentOutcomeDto>>();
+        Result<OrganizationEnrollmentOutcomeDto> pending = await claimHandler.HandleAsync(
+            new ClaimOrganizationEnrollmentLinkCommand(issued.Token, "member", "user:member"),
+            CancellationToken.None);
+        Organization organization = Assert.Single(repository.Organizations);
+        ResolveOrganizationJoinRequestCommand command = new(
+            organization.Id,
+            pending.Value.Claim.ClaimId,
+            OrganizationJoinRequestDecision.Approve,
+            pending.Value.Claim.Version,
+            "owner",
+            "user:owner");
+
+        Result<OrganizationEnrollmentOutcomeDto> approved = await resolveHandler.HandleAsync(
+            command, CancellationToken.None);
+        policy.IsAllowed = false;
+        Result<OrganizationEnrollmentOutcomeDto> replay = await resolveHandler.HandleAsync(
+            command, CancellationToken.None);
+        Result<OrganizationEnrollmentOutcomeDto> oppositeDecision = await resolveHandler.HandleAsync(
+            command with { Decision = OrganizationJoinRequestDecision.Reject },
+            CancellationToken.None);
+        Result<OrganizationEnrollmentOutcomeDto> unrelatedVersion = await resolveHandler.HandleAsync(
+            command with { ExpectedClaimVersion = command.ExpectedClaimVersion - 1 },
+            CancellationToken.None);
+
+        Assert.True(approved.IsSuccess, approved.Error.Code);
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(approved.Value, replay.Value);
+        Assert.Equal(OrganizationDomainErrors.VersionConflict, oppositeDecision.Error);
+        Assert.Equal(OrganizationDomainErrors.VersionConflict, unrelatedVersion.Error);
+        Assert.Single(repository.Memberships, item => item.SubjectId == "member");
+        Assert.Equal(
+            1,
+            policy.Contexts.Count(
+                context => context.Operation == OrganizationJoinAdmissionOperation.ApproveEnrollment));
+        Assert.Equal(approved.Value.Claim.Version, Assert.Single(repository.EnrollmentClaims).Version);
+    }
+
+    [Fact]
+    public async Task Approval_retry_fails_closed_when_the_correlated_membership_is_not_active()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        using ServiceProvider services = CreateServices(repository, new TestClock(Now));
+        OrganizationEnrollmentLinkIssuedDto issued = await IssueAsync(
+            services, repository, OrganizationEnrollmentApprovalMode.RequiresApproval, maximumClaims: 1);
+        var claimHandler = services.GetRequiredService<
+            ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>>();
+        var resolveHandler = services.GetRequiredService<
+            ICommandHandler<ResolveOrganizationJoinRequestCommand, OrganizationEnrollmentOutcomeDto>>();
+        Result<OrganizationEnrollmentOutcomeDto> pending = await claimHandler.HandleAsync(
+            new ClaimOrganizationEnrollmentLinkCommand(issued.Token, "member", "user:member"),
+            CancellationToken.None);
+        Organization organization = Assert.Single(repository.Organizations);
+        ResolveOrganizationJoinRequestCommand command = new(
+            organization.Id,
+            pending.Value.Claim.ClaimId,
+            OrganizationJoinRequestDecision.Approve,
+            pending.Value.Claim.Version,
+            "owner",
+            "user:owner");
+        Assert.True((await resolveHandler.HandleAsync(command, CancellationToken.None)).IsSuccess);
+        OrganizationMembership membership = Assert.Single(
+            repository.Memberships, item => item.SubjectId == "member");
+        Assert.True(membership.Suspend(
+            membership.Version, "user:owner", Guid.NewGuid(), Now.AddMinutes(1)).IsSuccess);
+
+        Result<OrganizationEnrollmentOutcomeDto> replay = await resolveHandler.HandleAsync(
+            command, CancellationToken.None);
+
+        Assert.Equal(OrganizationApplicationErrors.MembershipConflict, replay.Error);
+        Assert.Equal(
+            Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipState.Suspended,
+            membership.Status);
     }
 
     [Fact]
@@ -373,14 +467,15 @@ public sealed partial class OrganizationEnrollmentFlowTests
             CancellationToken.None);
         authorizationPolicy.AllowedClaimId = pending.Value.Claim.ClaimId;
 
+        ResolveOrganizationJoinRequestCommand command = new(
+            organization.Id,
+            pending.Value.Claim.ClaimId,
+            OrganizationJoinRequestDecision.Approve,
+            pending.Value.Claim.Version,
+            "manager",
+            "user:manager");
         Result<OrganizationEnrollmentOutcomeDto> approved = await resolveHandler.HandleAsync(
-            new ResolveOrganizationJoinRequestCommand(
-                organization.Id,
-                pending.Value.Claim.ClaimId,
-                OrganizationJoinRequestDecision.Approve,
-                pending.Value.Claim.Version,
-                "manager",
-                "user:manager"),
+            command,
             CancellationToken.None);
 
         Assert.True(approved.IsSuccess, approved.Error.Code);
@@ -393,10 +488,18 @@ public sealed partial class OrganizationEnrollmentFlowTests
         Assert.Equal("manager", context.SubjectId);
         Assert.Null(context.SourceId);
         Assert.Equal(pending.Value.Claim.ClaimId, context.ClaimId);
+
+        authorizationPolicy.IsAllowed = false;
+        Result<OrganizationEnrollmentOutcomeDto> deniedReplay = await resolveHandler.HandleAsync(
+            command,
+            CancellationToken.None);
+
+        Assert.Equal(OrganizationApplicationErrors.JoinSourceManagementRequired, deniedReplay.Error);
+        Assert.Equal(2, authorizationPolicy.Contexts.Count);
     }
 
     [Fact]
-    public async Task Rejection_releases_capacity_and_does_not_create_a_membership()
+    public async Task Rejection_retry_releases_capacity_once_and_does_not_create_a_membership()
     {
         TestOrganizationRepository repository = CreateRepository();
         using ServiceProvider services = CreateServices(repository, new TestClock(Now));
@@ -410,16 +513,20 @@ public sealed partial class OrganizationEnrollmentFlowTests
             issued.Token, "first", "user:first"), CancellationToken.None);
         Organization organization = Assert.Single(repository.Organizations);
 
-        var rejected = await resolveHandler.HandleAsync(new ResolveOrganizationJoinRequestCommand(
+        ResolveOrganizationJoinRequestCommand command = new(
             organization.Id, pending.Value.Claim.ClaimId, OrganizationJoinRequestDecision.Reject,
-            pending.Value.Claim.Version, "owner", "user:owner"), CancellationToken.None);
+            pending.Value.Claim.Version, "owner", "user:owner");
+        var rejected = await resolveHandler.HandleAsync(command, CancellationToken.None);
         var replacement = await claimHandler.HandleAsync(new ClaimOrganizationEnrollmentLinkCommand(
             issued.Token, "second", "user:second"), CancellationToken.None);
+        var replay = await resolveHandler.HandleAsync(command, CancellationToken.None);
 
         Assert.True(rejected.IsSuccess);
         Assert.Equal(OrganizationEnrollmentClaimStatus.Rejected, rejected.Value.Claim.Status);
         Assert.True(replacement.IsSuccess);
         Assert.Equal(OrganizationEnrollmentClaimStatus.Pending, replacement.Value.Claim.Status);
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(rejected.Value, replay.Value);
         Assert.DoesNotContain(repository.Memberships, item => item.SubjectId is "first" or "second");
         Assert.Equal(1, Assert.Single(repository.EnrollmentLinks).ReservedClaims);
     }
@@ -794,6 +901,7 @@ public sealed partial class OrganizationEnrollmentFlowTests
     private sealed class ClaimBoundJoinAuthorizationPolicy
         : IOrganizationJoinSourceAuthorizationPolicy
     {
+        public bool IsAllowed { get; set; } = true;
         public Guid AllowedClaimId { get; set; }
         public List<OrganizationJoinSourceAuthorizationContext> Contexts { get; } = [];
 
@@ -805,7 +913,8 @@ public sealed partial class OrganizationEnrollmentFlowTests
             return ValueTask.FromResult(
                 context.Operation ==
                     OrganizationJoinSourceAuthorizationOperation.ResolveJoinRequest &&
-                context.ClaimId == this.AllowedClaimId
+                context.ClaimId == this.AllowedClaimId &&
+                this.IsAllowed
                     ? OrganizationJoinSourceAuthorizationDecision.Allowed
                     : OrganizationJoinSourceAuthorizationDecision.Denied);
         }
