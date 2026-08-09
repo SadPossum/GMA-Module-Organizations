@@ -46,6 +46,9 @@ Transaction-stable lifecycle and membership authorization is tracked in
 [Organizations Governance Transaction Consistency Task](organizations-governance-transaction-consistency-task.md).
 Single-winner coordination across invitation and enrollment paths is tracked in
 [Organizations Join-Subject Consistency Task](organizations-join-subject-consistency-task.md).
+Cross-provider ordinal storage for case-preserving subject and actor identifiers
+is tracked in
+[Organizations Ordinal Identity Storage Task](organizations-ordinal-identity-storage-task.md).
 
 The bounded application-port filter for offline workflows that already hold a
 candidate set is tracked in

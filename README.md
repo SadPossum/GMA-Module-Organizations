@@ -16,6 +16,10 @@ no product lifecycle vocabulary.
 
 This repository is consumed source-first and is mounted by composition repositories as `gma/modules/organizations`. Product names such as workspace, team, or account group remain outside this module.
 
+Opaque subject and actor identifiers are trimmed, case-preserving, and compared
+ordinally on both PostgreSQL and SQL Server. Products must not lowercase or
+otherwise reinterpret external subject identities before composing the module.
+
 Useful entry points:
 
 - `Gma.Modules.Organizations.slnx`

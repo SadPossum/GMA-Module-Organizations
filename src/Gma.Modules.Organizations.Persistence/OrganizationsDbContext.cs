@@ -29,6 +29,7 @@ public sealed class OrganizationsDbContext(DbContextOptions<OrganizationsDbConte
     {
         modelBuilder.HasDefaultSchema(OrganizationsMigrations.Schema);
         modelBuilder.ApplyConfigurationsFromAssembly(typeof(OrganizationsDbContext).Assembly);
+        OrganizationsOrdinalIdentityModel.Apply(modelBuilder, this);
     }
 
     public override int SaveChanges(bool acceptAllChangesOnSuccess)
