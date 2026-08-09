@@ -20,7 +20,7 @@ public sealed class OrganizationContractEnumJsonTests
             { typeof(OrganizationMutationAdmissionOperation), OrganizationMutationAdmissionOperation.RotateEnrollmentLink, "rotate-enrollment-link" },
             { typeof(OrganizationMutationAdmissionOperation), OrganizationMutationAdmissionOperation.RestoreMembership, "restore-membership" },
             { typeof(OrganizationJoinSourceIssuanceOutcome), OrganizationJoinSourceIssuanceOutcome.AlreadyIssued, "already-issued" },
-            { typeof(OrganizationMembershipChangePolicyDecision), OrganizationMembershipChangePolicyDecision.Allowed, "allowed" },
+            { typeof(OrganizationMembershipChangePolicyDecision), OrganizationMembershipChangePolicyDecision.Unavailable, "unavailable" },
             { typeof(OrganizationMembershipLifecycleOutcome), OrganizationMembershipLifecycleOutcome.AlreadyInDesiredState, "already-in-desired-state" },
             { typeof(OrganizationChange), OrganizationChange.OwnershipTransferred, "ownership-transferred" },
             { typeof(OrganizationEnrollmentApprovalMode), OrganizationEnrollmentApprovalMode.RequiresApproval, "requires-approval" },

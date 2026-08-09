@@ -136,12 +136,27 @@ public sealed class OrganizationEndpointSupportTests
         Assert.Equal(expectedStatusCode, statusCode);
     }
 
+    [Theory]
+    [InlineData("Organizations.MembershipChangeRejected", StatusCodes.Status409Conflict)]
+    [InlineData("Organizations.MembershipChangeUnavailable", StatusCodes.Status503ServiceUnavailable)]
+    public void Membership_change_policy_failures_have_stable_http_statuses(
+        string errorCode,
+        int expectedStatusCode)
+    {
+        Error error = errorCode == OrganizationApplicationErrors.MembershipChangeRejected.Code
+            ? OrganizationApplicationErrors.MembershipChangeRejected
+            : OrganizationApplicationErrors.MembershipChangeUnavailable;
+
+        Assert.Equal(
+            expectedStatusCode,
+            OrganizationEndpointSupport.ErrorStatusCodes.GetStatusCode(error));
+    }
+
     [Fact]
     public void Persisted_state_and_product_policy_conflicts_are_http_conflicts()
     {
         Error[] conflicts =
         [
-            OrganizationApplicationErrors.MembershipChangeRejected,
             OrganizationApplicationErrors.OrganizationNotActive,
             OrganizationApplicationErrors.OrganizationAlreadySuspended,
             OrganizationApplicationErrors.OrganizationNotSuspended,

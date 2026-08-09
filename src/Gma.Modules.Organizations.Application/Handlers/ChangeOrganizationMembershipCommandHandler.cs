@@ -19,7 +19,7 @@ using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.Organization
 internal sealed class ChangeOrganizationMembershipCommandHandler(
     IOrganizationRepository organizations,
     IOrganizationGovernanceCoordinator governance,
-    IEnumerable<IOrganizationMembershipChangePolicy> membershipChangePolicies,
+    OrganizationMembershipChangePolicy membershipChangePolicy,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<ChangeOrganizationMembershipCommand, OrganizationMembershipDto>
 {
@@ -121,16 +121,12 @@ internal sealed class ChangeOrganizationMembershipCommandHandler(
             ToContractRole(membership.Role),
             ToContractStatus(membership.Status),
             mutation.RequestedStatus);
-        foreach (IOrganizationMembershipChangePolicy policy in membershipChangePolicies)
+        Result admitted = await membershipChangePolicy
+            .AuthorizeAsync(policyRequest, cancellationToken)
+            .ConfigureAwait(false);
+        if (admitted.IsFailure)
         {
-            OrganizationMembershipChangePolicyDecision decision = await policy
-                .EvaluateAsync(policyRequest, cancellationToken)
-                .ConfigureAwait(false);
-            if (decision != OrganizationMembershipChangePolicyDecision.Allowed)
-            {
-                return Result.Failure<OrganizationMembershipDto>(
-                    OrganizationApplicationErrors.MembershipChangeRejected);
-            }
+            return Result.Failure<OrganizationMembershipDto>(admitted.Error);
         }
 
         DateTimeOffset nowUtc = clock.UtcNow;

@@ -502,6 +502,10 @@ public sealed class MembershipGovernanceHandlerTests
         Organization organization = Assert.Single(repository.Organizations);
         OrganizationMembership owner = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Owner);
         OrganizationMembership member = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Member);
+        long organizationVersion = organization.Version;
+        long membershipVersion = member.Version;
+        int organizationEventCount = organization.DomainEvents.Count;
+        int membershipEventCount = member.DomainEvents.Count;
 
         var result = await handler.HandleAsync(new ChangeOrganizationMembershipCommand(
             organization.Id, Guid.NewGuid(), member.SubjectId, OrganizationMembershipAction.Remove,
@@ -509,10 +513,45 @@ public sealed class MembershipGovernanceHandlerTests
 
         Assert.Equal(OrganizationApplicationErrors.MembershipChangeRejected, result.Error);
         Assert.Equal(Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipState.Active, member.Status);
-        Assert.Equal(1, member.Version);
+        Assert.Equal(organizationVersion, organization.Version);
+        Assert.Equal(membershipVersion, member.Version);
+        Assert.Equal(organizationEventCount, organization.DomainEvents.Count);
+        Assert.Equal(membershipEventCount, member.DomainEvents.Count);
         Assert.NotNull(policy.Request);
         Assert.Equal(OrganizationMembershipStatus.Removed, policy.Request.RequestedStatus);
         Assert.Equal(member.SubjectId, policy.Request.TargetSubjectId);
+    }
+
+    [Fact]
+    public async Task Product_policy_unavailability_prevents_membership_mutation()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        RecordingMembershipChangePolicy policy = new(
+            OrganizationMembershipChangePolicyDecision.Unavailable);
+        using ServiceProvider services = CreateServices(repository, policy);
+        var handler = services.GetRequiredService<
+            ICommandHandler<ChangeOrganizationMembershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership owner = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership member = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Member);
+        long organizationVersion = organization.Version;
+        long membershipVersion = member.Version;
+        int organizationEventCount = organization.DomainEvents.Count;
+        int membershipEventCount = member.DomainEvents.Count;
+
+        var result = await handler.HandleAsync(new ChangeOrganizationMembershipCommand(
+            organization.Id, Guid.NewGuid(), member.SubjectId, OrganizationMembershipAction.Remove,
+            organization.Version, member.Version, owner.SubjectId, "user:owner"), CancellationToken.None);
+
+        Assert.Equal(OrganizationApplicationErrors.MembershipChangeUnavailable, result.Error);
+        Assert.Equal(Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipState.Active, member.Status);
+        Assert.Equal(organizationVersion, organization.Version);
+        Assert.Equal(membershipVersion, member.Version);
+        Assert.Equal(organizationEventCount, organization.DomainEvents.Count);
+        Assert.Equal(membershipEventCount, member.DomainEvents.Count);
+        Assert.Equal(1, policy.CallCount);
     }
 
     [Fact]

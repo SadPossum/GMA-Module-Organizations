@@ -14,6 +14,7 @@ public static class OrganizationApplicationErrors
     public static readonly Error CreationOperationConflict = new("Organizations.CreationOperationConflict", "The organization creation operation id is already bound to different inputs or an unavailable result.");
     public static readonly Error MembershipConflict = new("Organizations.MembershipConflict", "The subject already has an organization membership.");
     public static readonly Error MembershipChangeRejected = new("Organizations.MembershipChangeRejected", "The membership change is not available through this operation.");
+    public static readonly Error MembershipChangeUnavailable = new("Organizations.MembershipChangeUnavailable", "Organization membership change is temporarily unavailable.");
     public static readonly Error SelfServiceCreationDisabled = new("Organizations.SelfServiceCreationDisabled", "Self-service organization creation is disabled.");
     public static readonly Error SubjectVerificationRequired = new("Organizations.SubjectVerificationRequired", "A verified subject identity is required.");
     public static readonly Error OwnershipTargetMustDiffer = new("Organizations.OwnershipTargetMustDiffer", "Ownership must be transferred to another active member.");

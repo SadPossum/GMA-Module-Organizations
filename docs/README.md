@@ -6,6 +6,12 @@ Organizations is intentionally independent from Auth, Tenancy, AccessControl, No
 
 Product orchestration may suspend, restore, or remove an exact ordinary membership through the Contracts-only `IOrganizationMembershipLifecycle`. The operation is idempotent, protects owner memberships, preserves normal optimistic concurrency and events, and reports stable no-op/not-found/protected outcomes. The facade owns no employment state, access-profile name, property plan, or product reason vocabulary.
 
+Composed products may register one or more
+`IOrganizationMembershipChangePolicy` implementations for owner-facing
+membership suspension, resumption, and removal. Every policy must allow a fresh
+change. Deliberate denial is a conflict, while unavailable, invalid, or failed
+policy evaluation is retryable; exact committed retries remain policy-free.
+
 Product orchestration may read exact sources, list sources, and deny invitation/enrollment sources through the Contracts-only `IOrganizationJoinSourceManager`. Reads authorize the owner before source state is loaded, and mutations reuse the owner-authorized CQRS paths. Secret-bearing replacement is deliberately excluded: products revoke or disable the prior source, then use caller-id-based `IOrganizationJoinSourceIssuer` so retries cannot duplicate a replacement source and plaintext tokens are never replayed.
 
 Composed modules that already know an organization, enrollment link, and
@@ -28,6 +34,8 @@ The remaining production hardening work is tracked in
 [Organizations Production Hardening Task](organizations-production-hardening-task.md).
 The reusable host policy seam for owner-facing membership changes is tracked in
 [Organizations Membership Change Policy Task](organizations-membership-change-policy-task.md).
+Truthful denial and temporary-availability behavior for that seam is tracked in
+[Organizations Membership-Change Availability Task](organizations-membership-change-availability-task.md).
 The reusable admission seam for organization and join-source mutations is
 tracked in
 [Organizations Mutation Admission Policy Task](organizations-mutation-admission-policy-task.md).

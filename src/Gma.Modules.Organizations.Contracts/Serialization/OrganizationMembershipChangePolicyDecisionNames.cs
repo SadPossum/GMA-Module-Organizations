@@ -10,6 +10,7 @@ public static class OrganizationMembershipChangePolicyDecisionNames
         {
             OrganizationMembershipChangePolicyDecision.Allowed => "allowed",
             OrganizationMembershipChangePolicyDecision.Denied => "denied",
+            OrganizationMembershipChangePolicyDecision.Unavailable => "unavailable",
             _ => throw new ArgumentOutOfRangeException(nameof(decision), decision, "Organization membership change policy decision is invalid.")
         };
 
@@ -19,6 +20,7 @@ public static class OrganizationMembershipChangePolicyDecisionNames
         {
             "allowed" => OrganizationMembershipChangePolicyDecision.Allowed,
             "denied" => OrganizationMembershipChangePolicyDecision.Denied,
+            "unavailable" => OrganizationMembershipChangePolicyDecision.Unavailable,
             _ => OrganizationMembershipChangePolicyDecision.Unknown
         };
         return decision is not OrganizationMembershipChangePolicyDecision.Unknown;

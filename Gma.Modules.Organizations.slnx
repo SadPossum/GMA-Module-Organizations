@@ -40,6 +40,7 @@
     <File Path="docs/organizations-join-source-retry-safety-task.md" />
     <File Path="docs/organizations-join-subject-consistency-task.md" />
     <File Path="docs/organizations-lifecycle-consistency-task.md" />
+    <File Path="docs/organizations-membership-change-availability-task.md" />
     <File Path="docs/organizations-membership-change-policy-task.md" />
     <File Path="docs/organizations-membership-mutation-retry-safety-task.md" />
     <File Path="docs/organizations-mutation-admission-policy-task.md" />
