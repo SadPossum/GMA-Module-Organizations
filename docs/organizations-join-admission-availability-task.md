@@ -1,6 +1,6 @@
 # Organizations Join-Admission Availability Task
 
-Status: in progress
+Status: complete
 Date: 2026-08-09
 
 ## Goal
@@ -62,8 +62,36 @@ service response and no source capacity, membership, or claim mutation.
   source/subject, claim, and verified-email behavior.
 - [x] Synchronize source solutions and run one consolidated non-Docker gate per
   changed repository at the completed slice boundary.
-- [ ] Publish Organizations, Skeleton, BunkFy backend, and root pins, then
-  verify exact-commit CI.
+- [x] Publish Organizations, Skeleton, BunkFy backend, and root functional pins.
+- [x] Verify CI for the functional pins, then close the task.
+
+## Verification
+
+- Focused Organizations admission, invitation, enrollment, endpoint, and enum
+  coverage passed with 115 tests; focused BunkFy workspace onboarding coverage
+  passed with 10 tests.
+- The Organizations non-Docker gate passed boundaries, a zero-warning build,
+  PostgreSQL and SQL Server migration drift, all 265 fast tests, and the
+  vulnerable-package scan.
+- The BunkFy backend gate passed source graph and package checks, a zero-warning
+  build, all migration drift checks, architecture coverage, and every
+  non-Docker test suite.
+- The Skeleton consumer gate passed source solution, security, release,
+  generated-selection, build, migration, and fast-test checks. Its
+  documentation guard exposed and then verified the repaired index for the
+  earlier HTTP state-conflict task; all 269 architecture guards passed.
+- The BunkFy root lightweight gate passed latest-submodule, workspace graph,
+  operations, deployed-flow fixture, and production-admission checks.
+- Exact-commit CI passed for every functional pin: Organizations validation and
+  security, Skeleton validation, security, and CodeQL, BunkFy backend validation
+  and security, and BunkFy root validation, security, and both CodeQL languages.
+
+Functional publication pins:
+
+- Organizations: `67c56e58cf6fae1dc60d06712176d53ec1554f4a`
+- GMA Skeleton: `5671b5994390923b81857b742cac02c7867e0cf0`
+- BunkFy backend: `12ffd9c0d88fe50264b3bf1b008151215696addd`
+- BunkFy root: `f5811f6c49ddaba7e295bfe48a7ce953ec82f076`
 
 ## Not In This Slice
 
