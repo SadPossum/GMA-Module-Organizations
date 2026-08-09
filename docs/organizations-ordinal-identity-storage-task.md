@@ -1,6 +1,6 @@
 # Organizations Ordinal Identity Storage Task
 
-Status: module implementation complete; composition verification pending
+Status: completed
 Date: 2026-08-09
 
 ## Goal
@@ -66,7 +66,7 @@ subject values.
   indexed queries do not inject query-level collation.
 - [x] Add one SQL Server relational proof that case-distinct memberships and
   enrollment claims coexist and are read by exact identity.
-- [ ] Run the completed-slice Organizations gate and one Docker invocation,
+- [x] Run the completed-slice Organizations gate and one Docker invocation,
   then verify GMA Skeleton and BunkFy consumers before publication.
 
 ## Module Verification
@@ -82,6 +82,20 @@ subject values.
 - One focused SQL Server container invocation passes. It applies the complete
   migration chain and proves case-distinct memberships, enrollment claims, and
   actor queries remain isolated.
+
+## Consumer Verification
+
+- GMA Skeleton at `1fb9470`, with Organizations at `7952e44`, passes its full
+  non-Docker `eng/verify.ps1` gate: source/package synchronization, generated
+  app selection, a zero-warning build, all migration drift checks, 269
+  architecture tests, 17 integration tests, and every fast module suite are
+  green.
+- BunkFy backend at `29feaef`, with Organizations at `7952e44`, passes its full
+  non-Docker `eng/verify.ps1` gate: source synchronization, a zero-warning
+  build, all GMA and product migration drift checks, 94 architecture tests, 54
+  integration tests, and every fast module suite are green.
+- No public contract shape changed, so OpenAPI and TypeScript regeneration was
+  not required. The BunkFy web application was not changed.
 
 ## Not In This Slice
 
