@@ -1,6 +1,6 @@
 # Organizations Join-Subject Consistency Task
 
-Status: module implementation complete; composition verification pending
+Status: completed
 Date: 2026-08-09
 
 ## Goal
@@ -101,7 +101,7 @@ fact.
   precedence, and acquisition order.
 - [x] Add one PostgreSQL proof for same-subject competition and unrelated-
   subject concurrency, reusing a single container invocation for the slice.
-- [ ] Run the completed-slice Organizations gates, then verify GMA Skeleton and
+- [x] Run the completed-slice Organizations gates, then verify GMA Skeleton and
   BunkFy consumers. Regenerate OpenAPI clients only if the public schema changes.
 
 ## Module Verification
@@ -118,6 +118,20 @@ fact.
 - `git diff --check` reports no whitespace errors. Existing repository line-
   ending normalization notices remain non-errors and were not broadened into
   unrelated formatting work.
+
+## Consumer Verification
+
+- GMA Skeleton at `4e467a5`, with Organizations at `1b174a1`, passes
+  `eng/verify.ps1 -SkipRestore`: source synchronization, zero-warning builds,
+  migration drift, architecture, integration, and all non-Docker suites are
+  green.
+- BunkFy backend at `a9657eb1`, with Organizations at `1b174a1`, passes
+  `eng/verify.ps1 -SkipRestore`: source synchronization, a zero-warning build,
+  all migration drift checks, 94 architecture tests, 54 integration tests, and
+  every non-Docker module suite are green.
+- The slice changes error behavior and persistence internals without changing
+  public contract shapes. No OpenAPI or TypeScript regeneration was required,
+  and the BunkFy web application was not changed.
 
 ## Not In This Slice
 
