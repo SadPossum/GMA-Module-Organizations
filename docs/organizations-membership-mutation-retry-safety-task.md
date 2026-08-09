@@ -1,6 +1,6 @@
 # Organizations Membership Mutation Retry Safety Task
 
-Status: module implementation verified; composition publication pending
+Status: complete
 Date: 2026-08-09
 
 ## Goal
@@ -69,11 +69,11 @@ gap.
   invalidation, policy non-reexecution, and event/version stability.
 - [x] Persist the proof in SQL Server and PostgreSQL and prove commit/reload
   behavior with one focused provider test.
-- [ ] Align the canonical Skeleton, BunkFy backend contract, and BunkFy caller
+- [x] Align the canonical Skeleton, BunkFy backend contract, and BunkFy caller
   contract without leaking workspace semantics into GMA. BunkFy has no direct
   caller for these routes today; any future caller must retain one operation id
   for one unchanged target/action attempt.
-- [ ] Run one consolidated non-Docker gate and one focused provider gate at the
+- [x] Run one consolidated non-Docker gate and one focused provider gate at the
   completed slice boundary, then publish exact consumer pins.
 
 ## Not In This Slice
@@ -99,3 +99,19 @@ Verified on 2026-08-09:
 - the transitive package vulnerability audit found no vulnerable packages; and
 - the focused PostgreSQL commit/reload and self-authority-loss scenario passed
   with one mutation fact and stable aggregate versions on replay.
+
+## Composition Evidence
+
+Published on 2026-08-09:
+
+- Organizations implementation `d4e75b6` and synchronized source solution
+  `82bd5dc` were published to `dev`;
+- GMA Skeleton `e88a567` pinned the module and passed its complete non-Docker
+  composition gate, including generated app selections, zero-warning builds,
+  migration drift checks, 244 Organizations tests, and 269 architecture tests;
+- BunkFy Backend `b35a24f` pinned the module and passed its complete non-Docker
+  gate, including the solution graph, zero-warning build, all migration drift
+  checks, and all fast test assemblies; and
+- BunkFy Web `172ce49` published the required `operationId` OpenAPI and
+  TypeScript contract, with deterministic contract regeneration, typecheck,
+  lint, 255 tests, and the production build passing.
