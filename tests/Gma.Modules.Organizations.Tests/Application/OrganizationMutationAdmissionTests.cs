@@ -199,6 +199,45 @@ public sealed class OrganizationMutationAdmissionTests
     }
 
     [Fact]
+    public async Task Exact_ownership_transfer_retry_does_not_rerun_product_admission()
+    {
+        RecordingMutationPolicy policy = new();
+        using Fixture fixture = CreateFixture(policy);
+        OrganizationMembership owner = fixture.Repository.Memberships[0];
+        OrganizationMembership target = OrganizationMembership.Create(
+            Guid.NewGuid(),
+            fixture.Organization.Id,
+            "member",
+            DomainMembershipRole.Member,
+            "user:owner",
+            Guid.NewGuid(),
+            Now).Value;
+        fixture.Repository.Memberships.Add(target);
+        var handler = fixture.Services.GetRequiredService<
+            ICommandHandler<TransferOrganizationOwnershipCommand, OrganizationMembershipDto>>();
+        TransferOrganizationOwnershipCommand command = new(
+            fixture.Organization.Id,
+            target.SubjectId,
+            fixture.Organization.Version,
+            owner.Version,
+            target.Version,
+            owner.SubjectId,
+            "user:owner");
+
+        var first = await handler.HandleAsync(command, CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error.Code);
+        Assert.Single(policy.Contexts);
+        policy.Contexts.Clear();
+        policy.Decision = OrganizationMutationAdmissionDecision.Denied;
+
+        var replay = await handler.HandleAsync(command, CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(target.Id, replay.Value.MembershipId);
+        Assert.Empty(policy.Contexts);
+    }
+
+    [Fact]
     public async Task Invitation_issuance_is_denied_before_persistence()
     {
         RecordingMutationPolicy policy = DenyingPolicy();

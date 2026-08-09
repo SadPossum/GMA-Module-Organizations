@@ -34,11 +34,19 @@ internal sealed class TransferOrganizationOwnershipCommandHandler(
             command.OrganizationId,
             cancellationToken).ConfigureAwait(false);
 
-        Result<OrganizationMembership> currentOwner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
-            organizations, command.OrganizationId, command.SubjectId, cancellationToken).ConfigureAwait(false);
-        if (currentOwner.IsFailure)
+        OrganizationMembership? currentOwner = await organizations
+            .GetMembershipAsync(command.OrganizationId, command.SubjectId, cancellationToken)
+            .ConfigureAwait(false);
+        if (currentOwner is not
+            {
+                Status: OrganizationMembershipState.Active,
+                Role: DomainMembershipRole.Owner
+            })
         {
-            return Result.Failure<OrganizationMembershipDto>(currentOwner.Error);
+            return await this.TryReplayAsync(
+                command,
+                currentOwner,
+                cancellationToken).ConfigureAwait(false);
         }
 
         Organization? organization = await organizations
@@ -81,7 +89,7 @@ internal sealed class TransferOrganizationOwnershipCommandHandler(
             }
         }
 
-        Result demoted = currentOwner.Value.DemoteToMember(
+        Result demoted = currentOwner.DemoteToMember(
             command.ExpectedCurrentOwnerVersion, command.ActorId, ids.NewId(), nowUtc);
         if (demoted.IsFailure)
         {
@@ -97,4 +105,68 @@ internal sealed class TransferOrganizationOwnershipCommandHandler(
             ? Result.Success(target.ToDto())
             : Result.Failure<OrganizationMembershipDto>(ownerCount.Error);
     }
+
+    private async Task<Result<OrganizationMembershipDto>> TryReplayAsync(
+        TransferOrganizationOwnershipCommand command,
+        OrganizationMembership? formerOwner,
+        CancellationToken cancellationToken)
+    {
+        string? actorId = command.ActorId?.Trim();
+        if (formerOwner is not
+            {
+                Status: OrganizationMembershipState.Active,
+                Role: DomainMembershipRole.Member
+            } ||
+            !IsImmediatelyAfter(formerOwner.Version, command.ExpectedCurrentOwnerVersion) ||
+            !string.Equals(formerOwner.LastChangedBy, actorId, StringComparison.Ordinal))
+        {
+            return Result.Failure<OrganizationMembershipDto>(
+                OrganizationApplicationErrors.OwnerRequired);
+        }
+
+        Organization? organization = await organizations
+            .GetOrganizationAsync(command.OrganizationId, cancellationToken)
+            .ConfigureAwait(false);
+        OrganizationMembership? target = await organizations
+            .GetMembershipAsync(command.OrganizationId, command.TargetSubjectId, cancellationToken)
+            .ConfigureAwait(false);
+        if (!IsExactReplay(command, organization, formerOwner, target, actorId))
+        {
+            return Result.Failure<OrganizationMembershipDto>(
+                OrganizationApplicationErrors.OwnerRequired);
+        }
+
+        return Result.Success(target!.ToDto());
+    }
+
+    private static bool IsExactReplay(
+        TransferOrganizationOwnershipCommand command,
+        Organization? organization,
+        OrganizationMembership formerOwner,
+        OrganizationMembership? target,
+        string? actorId)
+    {
+        if (organization is not { Status: OrganizationState.Active } ||
+            target is not
+            {
+                Status: OrganizationMembershipState.Active,
+                Role: DomainMembershipRole.Owner
+            } ||
+            !IsImmediatelyAfter(organization.Version, command.ExpectedOrganizationVersion) ||
+            !string.Equals(organization.LastChangedBy, actorId, StringComparison.Ordinal) ||
+            organization.LastChangedAtUtc != formerOwner.LastChangedAtUtc)
+        {
+            return false;
+        }
+
+        bool targetWasPromoted =
+            IsImmediatelyAfter(target.Version, command.ExpectedTargetVersion) &&
+            string.Equals(target.LastChangedBy, actorId, StringComparison.Ordinal) &&
+            target.LastChangedAtUtc == formerOwner.LastChangedAtUtc;
+        bool targetWasAlreadyOwner = target.Version == command.ExpectedTargetVersion;
+        return targetWasPromoted || targetWasAlreadyOwner;
+    }
+
+    private static bool IsImmediatelyAfter(long currentVersion, long expectedVersion) =>
+        currentVersion > 1 && expectedVersion == currentVersion - 1;
 }

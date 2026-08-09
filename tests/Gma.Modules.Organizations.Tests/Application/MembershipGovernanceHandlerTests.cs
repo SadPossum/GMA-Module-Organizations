@@ -64,6 +64,107 @@ public sealed class MembershipGovernanceHandlerTests
     }
 
     [Fact]
+    public async Task Exact_transfer_retry_returns_promoted_target_without_mutating_state_again()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        using ServiceProvider services = CreateServices(repository);
+        var handler = services.GetRequiredService<
+            ICommandHandler<TransferOrganizationOwnershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership owner = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership member = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Member);
+        TransferOrganizationOwnershipCommand command = new(
+            organization.Id, member.SubjectId, organization.Version, owner.Version, member.Version,
+            owner.SubjectId, "user:owner");
+
+        var first = await handler.HandleAsync(command, CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error.Code);
+        long organizationVersion = organization.Version;
+        long ownerVersion = owner.Version;
+        long memberVersion = member.Version;
+        int organizationEventCount = organization.DomainEvents.Count;
+        int ownerEventCount = owner.DomainEvents.Count;
+        int memberEventCount = member.DomainEvents.Count;
+
+        var replay = await handler.HandleAsync(command, CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(member.Id, replay.Value.MembershipId);
+        Assert.Equal(organizationVersion, organization.Version);
+        Assert.Equal(ownerVersion, owner.Version);
+        Assert.Equal(memberVersion, member.Version);
+        Assert.Equal(organizationEventCount, organization.DomainEvents.Count);
+        Assert.Equal(ownerEventCount, owner.DomainEvents.Count);
+        Assert.Equal(memberEventCount, member.DomainEvents.Count);
+    }
+
+    [Fact]
+    public async Task Exact_transfer_retry_returns_target_that_was_already_an_owner()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        using ServiceProvider services = CreateServices(repository);
+        var handler = services.GetRequiredService<
+            ICommandHandler<TransferOrganizationOwnershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership currentOwner = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership target = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Member);
+        Assert.True(target.PromoteToOwner(
+            target.Version, "system:setup", Guid.NewGuid(), Now.AddSeconds(1)).IsSuccess);
+        Assert.True(organization.AddActiveOwner(
+            organization.Version, "system:setup", Guid.NewGuid(), Now.AddSeconds(1)).IsSuccess);
+        TransferOrganizationOwnershipCommand command = new(
+            organization.Id, target.SubjectId, organization.Version, currentOwner.Version, target.Version,
+            currentOwner.SubjectId, "user:owner");
+
+        var first = await handler.HandleAsync(command, CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error.Code);
+        long organizationVersion = organization.Version;
+        long currentOwnerVersion = currentOwner.Version;
+        long targetVersion = target.Version;
+        int organizationEventCount = organization.DomainEvents.Count;
+        int currentOwnerEventCount = currentOwner.DomainEvents.Count;
+        int targetEventCount = target.DomainEvents.Count;
+
+        var replay = await handler.HandleAsync(command, CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(target.Id, replay.Value.MembershipId);
+        Assert.Equal(1, organization.ActiveOwnerCount);
+        Assert.Equal(organizationVersion, organization.Version);
+        Assert.Equal(currentOwnerVersion, currentOwner.Version);
+        Assert.Equal(targetVersion, target.Version);
+        Assert.Equal(organizationEventCount, organization.DomainEvents.Count);
+        Assert.Equal(currentOwnerEventCount, currentOwner.DomainEvents.Count);
+        Assert.Equal(targetEventCount, target.DomainEvents.Count);
+    }
+
+    [Fact]
+    public async Task Later_organization_change_invalidates_transfer_replay()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        using ServiceProvider services = CreateServices(repository);
+        var handler = services.GetRequiredService<
+            ICommandHandler<TransferOrganizationOwnershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership owner = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership member = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Member);
+        TransferOrganizationOwnershipCommand command = new(
+            organization.Id, member.SubjectId, organization.Version, owner.Version, member.Version,
+            owner.SubjectId, "user:owner");
+        Assert.True((await handler.HandleAsync(command, CancellationToken.None)).IsSuccess);
+        Assert.True(organization.UpdateProfile(
+            "Harbor House Updated", "harbor-house-updated", organization.Version,
+            "user:member", Guid.NewGuid(), Now.AddMinutes(2)).IsSuccess);
+        int organizationEventCount = organization.DomainEvents.Count;
+
+        var replay = await handler.HandleAsync(command, CancellationToken.None);
+
+        Assert.True(replay.IsFailure);
+        Assert.Equal(OrganizationApplicationErrors.OwnerRequired, replay.Error);
+        Assert.Equal(organizationEventCount, organization.DomainEvents.Count);
+    }
+
+    [Fact]
     public async Task Transfer_to_self_is_rejected_before_state_changes()
     {
         TestRepository repository = CreateRepository(includeMember: false);
