@@ -178,7 +178,8 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
         string subjectId,
         CancellationToken cancellationToken)
     {
-        if (claim.Status == OrganizationEnrollmentClaimState.Rejected)
+        if (claim.Status is OrganizationEnrollmentClaimState.Rejected or
+            OrganizationEnrollmentClaimState.Withdrawn)
         {
             return Result.Failure<OrganizationEnrollmentOutcomeDto>(
                 Gma.Modules.Organizations.Domain.Errors.OrganizationDomainErrors.EnrollmentClaimUnavailable);

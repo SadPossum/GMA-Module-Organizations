@@ -187,6 +187,7 @@ public static class OrganizationMappings
         DomainEnrollmentClaimState.Accepted => OrganizationEnrollmentClaimStatus.Accepted,
         DomainEnrollmentClaimState.Rejected => OrganizationEnrollmentClaimStatus.Rejected,
         DomainEnrollmentClaimState.Expired => OrganizationEnrollmentClaimStatus.Expired,
+        DomainEnrollmentClaimState.Withdrawn => OrganizationEnrollmentClaimStatus.Withdrawn,
         _ => OrganizationEnrollmentClaimStatus.Unknown
     };
 

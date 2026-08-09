@@ -100,6 +100,22 @@ public sealed class OrganizationEnrollmentClaim : AggregateRoot<Guid>
         return Result.Success();
     }
 
+    public Result Withdraw(long expectedVersion, string actorId, Guid eventId, DateTimeOffset nowUtc)
+    {
+        Result pending = this.EnsurePending(expectedVersion, actorId, eventId, nowUtc);
+        if (pending.IsFailure)
+        {
+            return pending;
+        }
+
+        this.Status = OrganizationEnrollmentClaimState.Withdrawn;
+        this.Advance(actorId.Trim(), nowUtc);
+        this.RaiseDomainEvent(new OrganizationEnrollmentClaimWithdrawnDomainEvent(
+            eventId, nowUtc, this.OrganizationId, this.EnrollmentLinkId,
+            this.Id, this.Version));
+        return Result.Success();
+    }
+
     public bool IsDecisionDue(DateTimeOffset nowUtc) =>
         this.Status == OrganizationEnrollmentClaimState.Pending &&
         (this.DecisionExpiresAtUtc is null || this.DecisionExpiresAtUtc <= nowUtc);

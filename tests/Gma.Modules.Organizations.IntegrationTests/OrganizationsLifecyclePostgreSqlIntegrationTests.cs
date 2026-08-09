@@ -16,10 +16,14 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.Configuration;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
+using Microsoft.Extensions.Logging.Abstractions;
+using Microsoft.Extensions.Options;
 using Testcontainers.PostgreSql;
 using Xunit;
 using ClaimExpiredIntegrationEvent =
     Gma.Modules.Organizations.Contracts.OrganizationEnrollmentClaimExpiredIntegrationEvent;
+using ClaimWithdrawnIntegrationEvent =
+    Gma.Modules.Organizations.Contracts.OrganizationEnrollmentClaimWithdrawnIntegrationEvent;
 using InvitationExpiredIntegrationEvent =
     Gma.Modules.Organizations.Contracts.OrganizationInvitationExpiredIntegrationEvent;
 using LinkExpiredIntegrationEvent =
@@ -65,6 +69,106 @@ public sealed class OrganizationsLifecyclePostgreSqlIntegrationTests
         await VerifyStoredLifecycleAsync(provider, invitationId, linkId, claimId);
     }
 
+    [DockerFact]
+    public async Task Applicant_withdrawal_commits_state_capacity_one_fact_and_terminal_retention()
+    {
+        await using PostgreSqlContainer postgreSql =
+            new PostgreSqlBuilder("postgres:16-alpine")
+                .WithDatabase("organizations_withdrawal_tests")
+                .Build();
+        await postgreSql.StartAsync();
+        await using ServiceProvider provider = CreateProvider(postgreSql.GetConnectionString());
+        await MigrateAsync(provider);
+        (Guid organizationId, Guid linkId, Guid claimId, long claimVersion) =
+            await SeedPendingWithdrawalAsync(provider);
+        WithdrawOrganizationJoinRequestCommand command = new(
+            organizationId,
+            claimId,
+            claimVersion,
+            "member",
+            "user:member");
+
+        Result<Gma.Modules.Organizations.Contracts.OrganizationEnrollmentOutcomeDto> first =
+            await DispatchAsync(provider, command);
+        Result<Gma.Modules.Organizations.Contracts.OrganizationEnrollmentOutcomeDto> replay =
+            await DispatchAsync(provider, command);
+
+        Assert.True(first.IsSuccess, first.Error.Code);
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(
+            Gma.Modules.Organizations.Contracts.OrganizationEnrollmentClaimStatus.Withdrawn,
+            replay.Value.Claim.Status);
+        long linkVersion;
+        await using (AsyncServiceScope scope = provider.CreateAsyncScope())
+        {
+            OrganizationsDbContext dbContext =
+                scope.ServiceProvider.GetRequiredService<OrganizationsDbContext>();
+            Assert.Equal(
+                OrganizationEnrollmentClaimState.Withdrawn,
+                (await dbContext.EnrollmentClaims.SingleAsync(item => item.Id == claimId)).Status);
+            OrganizationEnrollmentLink storedLink =
+                await dbContext.EnrollmentLinks.SingleAsync(item => item.Id == linkId);
+            Assert.Equal(0, storedLink.ReservedClaims);
+            linkVersion = storedLink.Version;
+            var withdrawalFacts = await dbContext.OutboxMessages
+                .AsNoTracking()
+                .Where(message => message.EventType == typeof(ClaimWithdrawnIntegrationEvent).FullName)
+                .ToArrayAsync();
+            var withdrawalFact = Assert.Single(withdrawalFacts);
+            Assert.DoesNotContain("member", withdrawalFact.Payload, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("actor", withdrawalFact.Payload, StringComparison.OrdinalIgnoreCase);
+            Assert.DoesNotContain("token", withdrawalFact.Payload, StringComparison.OrdinalIgnoreCase);
+        }
+
+        OrganizationsRetentionService retention = new(
+            provider.GetRequiredService<IServiceScopeFactory>(),
+            new FixedClock(Now.AddDays(2)),
+            Options.Create(new OrganizationsRetentionOptions
+            {
+                Enabled = true,
+                InvitationHistoryDays = 1,
+                EnrollmentHistoryDays = 1,
+                BatchSize = 10,
+                MaxBatchesPerCategoryPerCycle = 2,
+                IntervalMinutes = 60
+            }),
+            NullLogger<OrganizationsRetentionService>.Instance);
+        await retention.CleanupAsync(CancellationToken.None);
+
+        await using (AsyncServiceScope activeSourceScope = provider.CreateAsyncScope())
+        {
+            OrganizationsDbContext activeSource =
+                activeSourceScope.ServiceProvider.GetRequiredService<OrganizationsDbContext>();
+            Assert.Contains(
+                await activeSource.EnrollmentClaims.AsNoTracking().ToArrayAsync(),
+                item => item.Id == claimId);
+            Assert.Contains(
+                await activeSource.EnrollmentLinks.AsNoTracking().ToArrayAsync(),
+                item => item.Id == linkId);
+        }
+
+        Result<Gma.Modules.Organizations.Contracts.OrganizationEnrollmentLinkDto> disabled =
+            await DispatchAsync(provider, new DisableOrganizationEnrollmentLinkCommand(
+                organizationId,
+                linkId,
+                linkVersion,
+                "owner",
+                "user:owner"));
+        Assert.True(disabled.IsSuccess, disabled.Error.Code);
+
+        await retention.CleanupAsync(CancellationToken.None);
+
+        await using AsyncServiceScope terminalSourceScope = provider.CreateAsyncScope();
+        OrganizationsDbContext terminalSource =
+            terminalSourceScope.ServiceProvider.GetRequiredService<OrganizationsDbContext>();
+        Assert.DoesNotContain(
+            await terminalSource.EnrollmentClaims.AsNoTracking().ToArrayAsync(),
+            item => item.Id == claimId);
+        Assert.DoesNotContain(
+            await terminalSource.EnrollmentLinks.AsNoTracking().ToArrayAsync(),
+            item => item.Id == linkId);
+    }
+
     private static async Task<(Guid InvitationId, Guid LinkId, Guid ClaimId)> SeedDueRecordsAsync(
         ServiceProvider provider)
     {
@@ -95,6 +199,34 @@ public sealed class OrganizationsLifecyclePostgreSqlIntegrationTests
         dbContext.AddRange(organization, owner, invitation, link, claim);
         await dbContext.SaveChangesAsync();
         return (invitation.Id, link.Id, claim.Id);
+    }
+
+    private static async Task<(Guid OrganizationId, Guid LinkId, Guid ClaimId, long ClaimVersion)>
+        SeedPendingWithdrawalAsync(ServiceProvider provider)
+    {
+        await using AsyncServiceScope scope = provider.CreateAsyncScope();
+        OrganizationsDbContext dbContext =
+            scope.ServiceProvider.GetRequiredService<OrganizationsDbContext>();
+        Organization organization = Organization.Create(
+            Guid.NewGuid(), "Withdrawal House", "withdrawal-house",
+            "user:owner", Guid.NewGuid(), Now.AddDays(-1)).Value;
+        OrganizationMembership owner = OrganizationMembership.Create(
+            Guid.NewGuid(), organization.Id, "owner", OrganizationMembershipRole.Owner,
+            "user:owner", Guid.NewGuid(), Now.AddDays(-1)).Value;
+        OrganizationEnrollmentLink link = OrganizationEnrollmentLink.Create(
+            Guid.NewGuid(), organization.Id, "owner", new string('a', 64),
+            Now.AddDays(1), 1, OrganizationEnrollmentApprovalMode.RequiresApproval,
+            "user:owner", Guid.NewGuid(), Now.AddHours(-1)).Value;
+        Assert.True(link.ReserveClaim(
+            "user:member", Guid.NewGuid(), Now.AddMinutes(-30)).IsSuccess);
+        OrganizationEnrollmentClaim claim = OrganizationEnrollmentClaim.Create(
+            Guid.NewGuid(), organization.Id, link.Id, "member",
+            OrganizationEnrollmentClaimState.Pending, null,
+            "user:member", Guid.NewGuid(), Now.AddMinutes(-30),
+            Now.AddDays(1)).Value;
+        dbContext.AddRange(organization, owner, link, claim);
+        await dbContext.SaveChangesAsync();
+        return (organization.Id, link.Id, claim.Id, claim.Version);
     }
 
     private static async Task VerifyStoredLifecycleAsync(
@@ -161,6 +293,15 @@ public sealed class OrganizationsLifecyclePostgreSqlIntegrationTests
     private static async Task<Result<int>> DispatchAsync(
         ServiceProvider provider,
         ICommand<int> command)
+    {
+        await using AsyncServiceScope scope = provider.CreateAsyncScope();
+        IRequestDispatcher dispatcher = scope.ServiceProvider.GetRequiredService<IRequestDispatcher>();
+        return await dispatcher.SendAsync(command, CancellationToken.None);
+    }
+
+    private static async Task<Result<TResponse>> DispatchAsync<TResponse>(
+        ServiceProvider provider,
+        ICommand<TResponse> command)
     {
         await using AsyncServiceScope scope = provider.CreateAsyncScope();
         IRequestDispatcher dispatcher = scope.ServiceProvider.GetRequiredService<IRequestDispatcher>();

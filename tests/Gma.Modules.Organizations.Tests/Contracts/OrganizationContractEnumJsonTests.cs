@@ -24,7 +24,7 @@ public sealed class OrganizationContractEnumJsonTests
             { typeof(OrganizationChange), OrganizationChange.OwnershipTransferred, "ownership-transferred" },
             { typeof(OrganizationEnrollmentApprovalMode), OrganizationEnrollmentApprovalMode.RequiresApproval, "requires-approval" },
             { typeof(OrganizationEnrollmentClaimChange), OrganizationEnrollmentClaimChange.Requested, "requested" },
-            { typeof(OrganizationEnrollmentClaimStatus), OrganizationEnrollmentClaimStatus.Expired, "expired" },
+            { typeof(OrganizationEnrollmentClaimStatus), OrganizationEnrollmentClaimStatus.Withdrawn, "withdrawn" },
             { typeof(OrganizationEnrollmentLinkChange), OrganizationEnrollmentLinkChange.ClaimReserved, "claim-reserved" },
             { typeof(OrganizationEnrollmentLinkStatus), OrganizationEnrollmentLinkStatus.CapacityReached, "capacity-reached" },
             { typeof(OrganizationInvitationChange), OrganizationInvitationChange.Superseded, "superseded" },

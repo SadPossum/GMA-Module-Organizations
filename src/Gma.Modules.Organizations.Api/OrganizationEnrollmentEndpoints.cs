@@ -115,6 +115,32 @@ internal static class OrganizationEnrollmentEndpoints
                 .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
         }).Produces<OrganizationEnrollmentOutcomeDto>(StatusCodes.Status200OK)
             .RequireAuthorization();
+
+        enrollment.MapPost(
+            "/{organizationId:guid}/join-requests/{claimId:guid}/withdraw",
+            async (Guid organizationId, Guid claimId,
+                WithdrawOrganizationJoinRequestRequest request,
+                HttpContext context, IRequestDispatcher dispatcher,
+                CancellationToken token) =>
+            {
+                OrganizationEndpointSupport.SetNoStoreHeaders(context);
+                if (!OrganizationEndpointSupport.TryGetSubject(context, out string subjectId))
+                {
+                    return Results.Unauthorized();
+                }
+
+                return (await dispatcher.SendAsync(
+                    new WithdrawOrganizationJoinRequestCommand(
+                        organizationId,
+                        claimId,
+                        request.ExpectedVersion,
+                        subjectId,
+                        OrganizationEndpointSupport.Actor(subjectId)),
+                    token).ConfigureAwait(false)).ToHttpResult(
+                        OrganizationEndpointSupport.ErrorStatusCodes);
+            })
+            .Produces<OrganizationEnrollmentOutcomeDto>(StatusCodes.Status200OK)
+            .RequireAuthorization();
     }
 
     private static void MapDisableLink(

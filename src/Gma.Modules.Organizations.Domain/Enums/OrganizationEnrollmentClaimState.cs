@@ -6,5 +6,6 @@ public enum OrganizationEnrollmentClaimState
     Pending = 1,
     Accepted = 2,
     Rejected = 3,
-    Expired = 4
+    Expired = 4,
+    Withdrawn = 5
 }

@@ -12,6 +12,7 @@ public static class OrganizationEnrollmentClaimStatusNames
             OrganizationEnrollmentClaimStatus.Accepted => "accepted",
             OrganizationEnrollmentClaimStatus.Rejected => "rejected",
             OrganizationEnrollmentClaimStatus.Expired => "expired",
+            OrganizationEnrollmentClaimStatus.Withdrawn => "withdrawn",
             _ => throw new ArgumentOutOfRangeException(nameof(status), status, "Organization enrollment claim status is invalid.")
         };
 
@@ -23,6 +24,7 @@ public static class OrganizationEnrollmentClaimStatusNames
             "accepted" => OrganizationEnrollmentClaimStatus.Accepted,
             "rejected" => OrganizationEnrollmentClaimStatus.Rejected,
             "expired" => OrganizationEnrollmentClaimStatus.Expired,
+            "withdrawn" => OrganizationEnrollmentClaimStatus.Withdrawn,
             _ => OrganizationEnrollmentClaimStatus.Unknown
         };
         return status is not OrganizationEnrollmentClaimStatus.Unknown;

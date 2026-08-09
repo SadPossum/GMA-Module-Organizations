@@ -26,5 +26,6 @@ public static class OrganizationsModuleMetadata
         .WithPublishedEvent<OrganizationEnrollmentLinkExpiredIntegrationEvent>()
         .WithPublishedEvent<OrganizationEnrollmentClaimChangedIntegrationEvent>()
         .WithPublishedEvent<OrganizationEnrollmentClaimExpiredIntegrationEvent>()
+        .WithPublishedEvent<OrganizationEnrollmentClaimWithdrawnIntegrationEvent>()
         .Build();
 }

@@ -53,6 +53,8 @@ public sealed record RotateOrganizationEnrollmentLinkRequest(
 
 public sealed record ResolveOrganizationJoinRequestRequest(long ExpectedVersion);
 
+public sealed record WithdrawOrganizationJoinRequestRequest(long ExpectedVersion);
+
 public sealed record ClaimOrganizationEnrollmentLinkRequest(string Token);
 
 public sealed record PreviewOrganizationEnrollmentLinkRequest(string Token);

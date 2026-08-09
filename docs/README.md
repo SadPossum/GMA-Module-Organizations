@@ -48,6 +48,8 @@ Single-winner coordination across invitation and enrollment paths is tracked in
 [Organizations Join-Subject Consistency Task](organizations-join-subject-consistency-task.md).
 Terminal approval and rejection replay semantics are tracked in
 [Organizations Join-Request Resolution Retry Safety Task](organizations-join-request-resolution-retry-safety-task.md).
+Applicant-owned withdrawal of pending approval requests is tracked in
+[Organizations Join-Request Withdrawal Task](organizations-join-request-withdrawal-task.md).
 Cross-provider ordinal storage for case-preserving subject and actor identifiers
 is tracked in
 [Organizations Ordinal Identity Storage Task](organizations-ordinal-identity-storage-task.md).
