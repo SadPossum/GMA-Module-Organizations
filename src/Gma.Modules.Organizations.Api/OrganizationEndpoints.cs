@@ -190,7 +190,7 @@ internal static class OrganizationEndpoints
             }
 
             return (await dispatcher.SendAsync(new ChangeOrganizationMembershipCommand(
-                organizationId, request.TargetSubjectId, action,
+                organizationId, request.OperationId, request.TargetSubjectId, action,
                 request.ExpectedOrganizationVersion, request.ExpectedMembershipVersion,
                 subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);

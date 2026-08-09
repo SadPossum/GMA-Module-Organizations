@@ -54,6 +54,9 @@ Retry safety for the three-aggregate ownership handoff is tracked in
 [Organizations Ownership Transfer Retry Safety Task](organizations-ownership-transfer-retry-safety-task.md).
 Retry safety for profile and lifecycle mutations is tracked in
 [Organizations Profile And Lifecycle Retry Safety Task](organizations-profile-lifecycle-retry-safety-task.md).
+Retry safety for owner-initiated membership suspension, resumption, and removal
+is tracked in
+[Organizations Membership Mutation Retry Safety Task](organizations-membership-mutation-retry-safety-task.md).
 Truthful bounded continuation across Organizations directories is tracked in
 [Organizations Truthful Pagination Task](organizations-truthful-pagination-task.md).
 Cross-provider ordinal storage for case-preserving subject and actor identifiers
@@ -164,6 +167,13 @@ Organizations retains a bounded proof for the immediately preceding
 organization-root mutation, so an unchanged lost-response retry returns the
 committed state without rerunning product admission or publishing another
 event. A later root mutation invalidates that proof and callers must refetch.
+
+Owner-initiated membership suspension, resumption, and removal require a
+caller-owned operation id scoped to the target membership. Exact retries use a
+bounded membership proof and, when active-owner count changed, a correlated
+organization-root proof. A caller that suspended or removed its own owner
+membership can recover only that exact committed result; the replay path does
+not restore mutation authority.
 
 Natural lifecycle processing and domain retention are disabled by default. Enable
 both deliberately on one host responsible for Organizations maintenance.

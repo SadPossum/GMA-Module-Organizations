@@ -237,8 +237,22 @@ public sealed partial class Organization : AggregateRoot<Guid>
         return Result.Success();
     }
 
-    public Result AddActiveOwner(long expectedVersion, string actorId, Guid eventId, DateTimeOffset nowUtc)
+    public Result AddActiveOwner(
+        long expectedVersion,
+        string actorId,
+        Guid eventId,
+        DateTimeOffset nowUtc,
+        Guid? mutationOperationId = null)
     {
+        if (mutationOperationId.HasValue)
+        {
+            Result operation = ValidateMutationOperation(mutationOperationId.Value);
+            if (operation.IsFailure)
+            {
+                return operation;
+            }
+        }
+
         Result active = this.EnsureActive(expectedVersion, actorId, eventId);
         if (active.IsFailure)
         {
@@ -246,13 +260,31 @@ public sealed partial class Organization : AggregateRoot<Guid>
         }
 
         this.ActiveOwnerCount++;
-        this.Advance(actorId, nowUtc);
+        this.Advance(
+            actorId,
+            nowUtc,
+            mutationOperationId,
+            mutationOperationId.HasValue ? OrganizationChangeKind.OwnerCountChanged : null);
         this.RaiseChange(eventId, nowUtc, OrganizationChangeKind.OwnerCountChanged);
         return Result.Success();
     }
 
-    public Result RemoveActiveOwner(long expectedVersion, string actorId, Guid eventId, DateTimeOffset nowUtc)
+    public Result RemoveActiveOwner(
+        long expectedVersion,
+        string actorId,
+        Guid eventId,
+        DateTimeOffset nowUtc,
+        Guid? mutationOperationId = null)
     {
+        if (mutationOperationId.HasValue)
+        {
+            Result operation = ValidateMutationOperation(mutationOperationId.Value);
+            if (operation.IsFailure)
+            {
+                return operation;
+            }
+        }
+
         Result active = this.EnsureActive(expectedVersion, actorId, eventId);
         if (active.IsFailure)
         {
@@ -265,7 +297,11 @@ public sealed partial class Organization : AggregateRoot<Guid>
         }
 
         this.ActiveOwnerCount--;
-        this.Advance(actorId, nowUtc);
+        this.Advance(
+            actorId,
+            nowUtc,
+            mutationOperationId,
+            mutationOperationId.HasValue ? OrganizationChangeKind.OwnerCountChanged : null);
         this.RaiseChange(eventId, nowUtc, OrganizationChangeKind.OwnerCountChanged);
         return Result.Success();
     }

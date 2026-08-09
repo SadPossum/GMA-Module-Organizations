@@ -66,6 +66,7 @@ public sealed class OrganizationGovernanceCoordinationTests
         var result = await handler.HandleAsync(
             new ChangeOrganizationMembershipCommand(
                 organization.Id,
+                Guid.NewGuid(),
                 member.SubjectId,
                 OrganizationMembershipAction.Suspend,
                 organization.Version,

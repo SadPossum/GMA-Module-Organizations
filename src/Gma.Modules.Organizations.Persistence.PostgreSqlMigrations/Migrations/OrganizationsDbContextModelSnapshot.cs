@@ -463,6 +463,12 @@ namespace Gma.Modules.Organizations.Persistence.PostgreSqlMigrations.Migrations
                         .HasMaxLength(192)
                         .HasColumnType("character varying(192)");
 
+                    b.Property<int?>("LastMutationKind")
+                        .HasColumnType("integer");
+
+                    b.Property<Guid?>("LastMutationOperationId")
+                        .HasColumnType("uuid");
+
                     b.Property<Guid>("OrganizationId")
                         .HasColumnType("uuid");
 

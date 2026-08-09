@@ -13,6 +13,7 @@ public enum OrganizationMembershipAction
 
 public sealed record ChangeOrganizationMembershipCommand(
     Guid OrganizationId,
+    Guid OperationId,
     string TargetSubjectId,
     OrganizationMembershipAction Action,
     long ExpectedOrganizationVersion,

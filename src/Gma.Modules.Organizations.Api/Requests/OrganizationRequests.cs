@@ -18,6 +18,7 @@ public sealed record OrganizationLifecycleRequest(
     long ExpectedVersion);
 
 public sealed record OrganizationMembershipLifecycleRequest(
+    Guid OperationId,
     string TargetSubjectId,
     long ExpectedOrganizationVersion,
     long ExpectedMembershipVersion);

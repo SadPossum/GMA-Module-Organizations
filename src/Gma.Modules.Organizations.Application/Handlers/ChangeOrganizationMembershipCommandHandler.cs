@@ -11,6 +11,7 @@ using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
+using Gma.Modules.Organizations.Domain.ValueObjects;
 using ContractMembershipRole = Gma.Modules.Organizations.Contracts.OrganizationMembershipRole;
 using ContractMembershipStatus = Gma.Modules.Organizations.Contracts.OrganizationMembershipStatus;
 using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipRole;
@@ -26,43 +27,91 @@ internal sealed class ChangeOrganizationMembershipCommandHandler(
         ChangeOrganizationMembershipCommand command,
         CancellationToken cancellationToken)
     {
+        if (command.OperationId == Guid.Empty)
+        {
+            return Result.Failure<OrganizationMembershipDto>(
+                OrganizationApplicationErrors.MutationOperationRequired);
+        }
+
+        if (!OrganizationMembershipMutation.TryResolve(
+                command.Action,
+                out OrganizationMembershipMutation mutation))
+        {
+            return Result.Failure<OrganizationMembershipDto>(
+                OrganizationApplicationErrors.MembershipNotFound);
+        }
+
+        Result<OrganizationActorId> actor = OrganizationActorId.Create(
+            command.ActorId);
+        if (actor.IsFailure)
+        {
+            return Result.Failure<OrganizationMembershipDto>(actor.Error);
+        }
+
         await governance.AcquireExclusiveAsync(
             command.OrganizationId,
             cancellationToken).ConfigureAwait(false);
 
         Result<OrganizationMembership> owner = await OrganizationMembershipAuthorization.RequireOwnerAsync(
             organizations, command.OrganizationId, command.SubjectId, cancellationToken).ConfigureAwait(false);
-        if (owner.IsFailure)
-        {
-            return Result.Failure<OrganizationMembershipDto>(owner.Error);
-        }
-
         Organization? organization = await organizations
             .GetOrganizationAsync(command.OrganizationId, cancellationToken)
             .ConfigureAwait(false);
         OrganizationMembership? membership = await organizations
             .GetMembershipAsync(command.OrganizationId, command.TargetSubjectId, cancellationToken)
             .ConfigureAwait(false);
+        if (owner.IsFailure)
+        {
+            if (organization is null || membership is null ||
+                !IsSelfReplayCandidate(command, membership, actor.Value.Value))
+            {
+                return Result.Failure<OrganizationMembershipDto>(owner.Error);
+            }
+
+            return mutation.IsExactReplay(
+                organization,
+                membership,
+                command.OperationId,
+                command.ExpectedOrganizationVersion,
+                command.ExpectedMembershipVersion,
+                actor.Value.Value)
+                ? Result.Success(membership.ToDto())
+                : Result.Failure<OrganizationMembershipDto>(
+                    OrganizationApplicationErrors.MutationOperationConflict);
+        }
+
         if (organization is null)
         {
-            return Result.Failure<OrganizationMembershipDto>(OrganizationApplicationErrors.OrganizationNotFound);
+            return Result.Failure<OrganizationMembershipDto>(
+                OrganizationApplicationErrors.OrganizationNotFound);
         }
 
         if (membership is null)
         {
-            return Result.Failure<OrganizationMembershipDto>(OrganizationApplicationErrors.MembershipNotFound);
+            return Result.Failure<OrganizationMembershipDto>(
+                OrganizationApplicationErrors.MembershipNotFound);
         }
 
-        ContractMembershipStatus requestedStatus = command.Action switch
+        if (membership.HasLastMutationOperation(command.OperationId))
         {
-            OrganizationMembershipAction.Suspend => ContractMembershipStatus.Suspended,
-            OrganizationMembershipAction.Resume => ContractMembershipStatus.Active,
-            OrganizationMembershipAction.Remove => ContractMembershipStatus.Removed,
-            _ => ContractMembershipStatus.Unknown
-        };
-        if (requestedStatus == ContractMembershipStatus.Unknown)
+            return mutation.IsExactReplay(
+                organization,
+                membership,
+                command.OperationId,
+                command.ExpectedOrganizationVersion,
+                command.ExpectedMembershipVersion,
+                actor.Value.Value)
+                ? Result.Success(membership.ToDto())
+                : Result.Failure<OrganizationMembershipDto>(
+                    OrganizationApplicationErrors.MutationOperationConflict);
+        }
+
+        if (membership.Version != command.ExpectedMembershipVersion ||
+            mutation.ChangesOwnerCount(membership) &&
+            organization.Version != command.ExpectedOrganizationVersion)
         {
-            return Result.Failure<OrganizationMembershipDto>(OrganizationApplicationErrors.MembershipNotFound);
+            return Result.Failure<OrganizationMembershipDto>(
+                OrganizationApplicationErrors.VersionConflict);
         }
 
         OrganizationMembershipChangePolicyRequest policyRequest = new(
@@ -71,7 +120,7 @@ internal sealed class ChangeOrganizationMembershipCommandHandler(
             command.TargetSubjectId,
             ToContractRole(membership.Role),
             ToContractStatus(membership.Status),
-            requestedStatus);
+            mutation.RequestedStatus);
         foreach (IOrganizationMembershipChangePolicy policy in membershipChangePolicies)
         {
             OrganizationMembershipChangePolicyDecision decision = await policy
@@ -86,22 +135,24 @@ internal sealed class ChangeOrganizationMembershipCommandHandler(
 
         DateTimeOffset nowUtc = clock.UtcNow;
         Result ownerCount = ChangeOwnerCountIfNeeded(
-            organization, membership, command, nowUtc);
+            organization,
+            membership,
+            command,
+            mutation,
+            actor.Value.Value,
+            nowUtc);
         if (ownerCount.IsFailure)
         {
             return Result.Failure<OrganizationMembershipDto>(ownerCount.Error);
         }
 
-        Result changed = command.Action switch
-        {
-            OrganizationMembershipAction.Suspend => membership.Suspend(
-                command.ExpectedMembershipVersion, command.ActorId, ids.NewId(), nowUtc),
-            OrganizationMembershipAction.Resume => membership.Resume(
-                command.ExpectedMembershipVersion, command.ActorId, ids.NewId(), nowUtc),
-            OrganizationMembershipAction.Remove => membership.Remove(
-                command.ExpectedMembershipVersion, command.ActorId, ids.NewId(), nowUtc),
-            _ => Result.Failure(OrganizationApplicationErrors.MembershipNotFound)
-        };
+        Result changed = mutation.Apply(
+            membership,
+            command.ExpectedMembershipVersion,
+            actor.Value.Value,
+            command.OperationId,
+            ids.NewId(),
+            nowUtc);
 
         return changed.IsSuccess
             ? Result.Success(membership.ToDto())
@@ -112,6 +163,8 @@ internal sealed class ChangeOrganizationMembershipCommandHandler(
         Organization organization,
         OrganizationMembership membership,
         ChangeOrganizationMembershipCommand command,
+        OrganizationMembershipMutation mutation,
+        string actorId,
         DateTimeOffset nowUtc)
     {
         if (membership.Role != DomainMembershipRole.Owner)
@@ -120,21 +173,44 @@ internal sealed class ChangeOrganizationMembershipCommandHandler(
         }
 
         bool removesActiveOwner = membership.Status == OrganizationMembershipState.Active &&
-            command.Action is OrganizationMembershipAction.Suspend or OrganizationMembershipAction.Remove;
+            mutation.Action is OrganizationMembershipAction.Suspend or OrganizationMembershipAction.Remove;
         bool restoresOwner = membership.Status == OrganizationMembershipState.Suspended &&
-            command.Action == OrganizationMembershipAction.Resume;
+            mutation.Action == OrganizationMembershipAction.Resume;
 
         if (removesActiveOwner)
         {
             return organization.RemoveActiveOwner(
-                command.ExpectedOrganizationVersion, command.ActorId, ids.NewId(), nowUtc);
+                command.ExpectedOrganizationVersion,
+                actorId,
+                ids.NewId(),
+                nowUtc,
+                command.OperationId);
         }
 
         return restoresOwner
             ? organization.AddActiveOwner(
-                command.ExpectedOrganizationVersion, command.ActorId, ids.NewId(), nowUtc)
+                command.ExpectedOrganizationVersion,
+                actorId,
+                ids.NewId(),
+                nowUtc,
+                command.OperationId)
             : Result.Success();
     }
+
+    private static bool IsSelfReplayCandidate(
+        ChangeOrganizationMembershipCommand command,
+        OrganizationMembership membership,
+        string actorId) =>
+        membership.Role == DomainMembershipRole.Owner &&
+        membership.HasLastMutationOperation(command.OperationId) &&
+        string.Equals(
+            membership.SubjectId,
+            command.SubjectId.Trim(),
+            StringComparison.Ordinal) &&
+        string.Equals(
+            membership.LastChangedBy,
+            actorId,
+            StringComparison.Ordinal);
 
     private static ContractMembershipRole ToContractRole(DomainMembershipRole role) => role switch
     {

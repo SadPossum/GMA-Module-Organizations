@@ -32,7 +32,7 @@ public sealed class MembershipGovernanceHandlerTests
         OrganizationMembership owner = Assert.Single(repository.Memberships);
 
         var result = await handler.HandleAsync(new ChangeOrganizationMembershipCommand(
-            organization.Id, owner.SubjectId, OrganizationMembershipAction.Suspend,
+            organization.Id, Guid.NewGuid(), owner.SubjectId, OrganizationMembershipAction.Suspend,
             organization.Version, owner.Version, owner.SubjectId, "user:owner"), CancellationToken.None);
 
         Assert.True(result.IsFailure);
@@ -195,11 +195,300 @@ public sealed class MembershipGovernanceHandlerTests
         OrganizationMembership member = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Member);
 
         var result = await handler.HandleAsync(new ChangeOrganizationMembershipCommand(
-            organization.Id, member.SubjectId, OrganizationMembershipAction.Suspend,
+            organization.Id, Guid.NewGuid(), member.SubjectId, OrganizationMembershipAction.Suspend,
             organization.Version, member.Version, owner.SubjectId, "user:owner"), CancellationToken.None);
 
         Assert.True(result.IsSuccess, result.Error.Code);
         Assert.Equal(Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipState.Suspended, member.Status);
+    }
+
+    [Fact]
+    public async Task Exact_member_change_retry_is_stable_and_skips_product_policy()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        RecordingMembershipChangePolicy policy = new(
+            OrganizationMembershipChangePolicyDecision.Allowed);
+        using ServiceProvider services = CreateServices(repository, policy);
+        var handler = services.GetRequiredService<
+            ICommandHandler<ChangeOrganizationMembershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership owner = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership member = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Member);
+        ChangeOrganizationMembershipCommand command = new(
+            organization.Id,
+            Guid.NewGuid(),
+            member.SubjectId,
+            OrganizationMembershipAction.Suspend,
+            organization.Version,
+            member.Version,
+            owner.SubjectId,
+            "user:owner");
+
+        var first = await handler.HandleAsync(command, CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error.Code);
+        long version = member.Version;
+        int eventCount = member.DomainEvents.Count;
+
+        var replay = await handler.HandleAsync(command, CancellationToken.None);
+        var changedReuse = await handler.HandleAsync(
+            command with { Action = OrganizationMembershipAction.Remove },
+            CancellationToken.None);
+        var staleNewAttempt = await handler.HandleAsync(
+            command with { OperationId = Guid.NewGuid() },
+            CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(version, replay.Value.Version);
+        Assert.Equal(version, member.Version);
+        Assert.Equal(eventCount, member.DomainEvents.Count);
+        Assert.Equal(1, policy.CallCount);
+        Assert.Equal(
+            OrganizationApplicationErrors.MutationOperationConflict,
+            changedReuse.Error);
+        Assert.Equal(
+            OrganizationApplicationErrors.VersionConflict,
+            staleNewAttempt.Error);
+
+        Assert.True(member.Resume(
+            member.Version,
+            "system:later-change",
+            Guid.NewGuid(),
+            Now.AddMinutes(2)).IsSuccess);
+        var historicalReplay = await handler.HandleAsync(command, CancellationToken.None);
+        Assert.Equal(
+            OrganizationApplicationErrors.VersionConflict,
+            historicalReplay.Error);
+        Assert.Null(member.LastMutationOperationId);
+        Assert.Null(member.LastMutationKind);
+        Assert.Equal(1, policy.CallCount);
+    }
+
+    [Fact]
+    public async Task Self_suspension_retry_recovers_after_owner_authority_is_lost()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        RecordingMembershipChangePolicy policy = new(
+            OrganizationMembershipChangePolicyDecision.Allowed);
+        using ServiceProvider services = CreateServices(repository, policy);
+        var handler = services.GetRequiredService<
+            ICommandHandler<ChangeOrganizationMembershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership owner = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership secondOwner = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Member);
+        PromoteToOwner(organization, secondOwner);
+        ChangeOrganizationMembershipCommand command = new(
+            organization.Id,
+            Guid.NewGuid(),
+            owner.SubjectId,
+            OrganizationMembershipAction.Suspend,
+            organization.Version,
+            owner.Version,
+            owner.SubjectId,
+            "user:owner");
+
+        var first = await handler.HandleAsync(command, CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error.Code);
+        long organizationVersion = organization.Version;
+        long membershipVersion = owner.Version;
+        int organizationEventCount = organization.DomainEvents.Count;
+        int membershipEventCount = owner.DomainEvents.Count;
+
+        var replay = await handler.HandleAsync(command, CancellationToken.None);
+        var changedReuse = await handler.HandleAsync(
+            command with { Action = OrganizationMembershipAction.Remove },
+            CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(organizationVersion, organization.Version);
+        Assert.Equal(membershipVersion, owner.Version);
+        Assert.Equal(organizationEventCount, organization.DomainEvents.Count);
+        Assert.Equal(membershipEventCount, owner.DomainEvents.Count);
+        Assert.Equal(1, organization.ActiveOwnerCount);
+        Assert.Equal(1, policy.CallCount);
+        Assert.Equal(
+            OrganizationApplicationErrors.MutationOperationConflict,
+            changedReuse.Error);
+    }
+
+    [Fact]
+    public async Task Removing_a_suspended_owner_replays_without_a_second_owner_count_change()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        using ServiceProvider services = CreateServices(repository);
+        var handler = services.GetRequiredService<
+            ICommandHandler<ChangeOrganizationMembershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership currentOwner = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership target = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Member);
+        PromoteToOwner(organization, target);
+        ChangeOrganizationMembershipCommand suspend = new(
+            organization.Id,
+            Guid.NewGuid(),
+            target.SubjectId,
+            OrganizationMembershipAction.Suspend,
+            organization.Version,
+            target.Version,
+            currentOwner.SubjectId,
+            "user:owner");
+        Assert.True((await handler.HandleAsync(suspend, CancellationToken.None)).IsSuccess);
+        ChangeOrganizationMembershipCommand remove = new(
+            organization.Id,
+            Guid.NewGuid(),
+            target.SubjectId,
+            OrganizationMembershipAction.Remove,
+            organization.Version,
+            target.Version,
+            currentOwner.SubjectId,
+            "user:owner");
+
+        var first = await handler.HandleAsync(remove, CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error.Code);
+        long organizationVersion = organization.Version;
+        int organizationEventCount = organization.DomainEvents.Count;
+
+        var replay = await handler.HandleAsync(remove, CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(organizationVersion, organization.Version);
+        Assert.Equal(organizationEventCount, organization.DomainEvents.Count);
+        Assert.Equal(1, organization.ActiveOwnerCount);
+    }
+
+    [Fact]
+    public async Task Owner_resume_retry_is_correlated_with_the_owner_count_change()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        using ServiceProvider services = CreateServices(repository);
+        var handler = services.GetRequiredService<
+            ICommandHandler<ChangeOrganizationMembershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership currentOwner = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership target = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Member);
+        PromoteToOwner(organization, target);
+        ChangeOrganizationMembershipCommand suspend = new(
+            organization.Id,
+            Guid.NewGuid(),
+            target.SubjectId,
+            OrganizationMembershipAction.Suspend,
+            organization.Version,
+            target.Version,
+            currentOwner.SubjectId,
+            "user:owner");
+        Assert.True((await handler.HandleAsync(suspend, CancellationToken.None)).IsSuccess);
+        ChangeOrganizationMembershipCommand resume = new(
+            organization.Id,
+            Guid.NewGuid(),
+            target.SubjectId,
+            OrganizationMembershipAction.Resume,
+            organization.Version,
+            target.Version,
+            currentOwner.SubjectId,
+            "user:owner");
+
+        var first = await handler.HandleAsync(resume, CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error.Code);
+        long organizationVersion = organization.Version;
+        long membershipVersion = target.Version;
+        int organizationEventCount = organization.DomainEvents.Count;
+        int membershipEventCount = target.DomainEvents.Count;
+
+        var replay = await handler.HandleAsync(resume, CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(organizationVersion, organization.Version);
+        Assert.Equal(membershipVersion, target.Version);
+        Assert.Equal(organizationEventCount, organization.DomainEvents.Count);
+        Assert.Equal(membershipEventCount, target.DomainEvents.Count);
+        Assert.Equal(2, organization.ActiveOwnerCount);
+    }
+
+    [Fact]
+    public async Task Changed_owner_cannot_replay_the_initiating_owners_operation()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        using ServiceProvider services = CreateServices(repository);
+        var handler = services.GetRequiredService<
+            ICommandHandler<ChangeOrganizationMembershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership currentOwner = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership target = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Member);
+        PromoteToOwner(organization, target);
+        ChangeOrganizationMembershipCommand command = new(
+            organization.Id,
+            Guid.NewGuid(),
+            target.SubjectId,
+            OrganizationMembershipAction.Suspend,
+            organization.Version,
+            target.Version,
+            currentOwner.SubjectId,
+            "user:owner");
+        Assert.True((await handler.HandleAsync(command, CancellationToken.None)).IsSuccess);
+
+        var replayByTarget = await handler.HandleAsync(
+            command with
+            {
+                SubjectId = target.SubjectId,
+                ActorId = "user:member"
+            },
+            CancellationToken.None);
+        var missingTargetByTarget = await handler.HandleAsync(
+            command with
+            {
+                OperationId = Guid.NewGuid(),
+                TargetSubjectId = "missing",
+                SubjectId = target.SubjectId,
+                ActorId = "user:member"
+            },
+            CancellationToken.None);
+
+        Assert.Equal(OrganizationApplicationErrors.OwnerRequired, replayByTarget.Error);
+        Assert.Equal(
+            OrganizationApplicationErrors.OwnerRequired,
+            missingTargetByTarget.Error);
+    }
+
+    [Fact]
+    public async Task Empty_membership_operation_is_rejected_before_policy_or_state_change()
+    {
+        TestRepository repository = CreateRepository(includeMember: true);
+        RecordingMembershipChangePolicy policy = new(
+            OrganizationMembershipChangePolicyDecision.Allowed);
+        using ServiceProvider services = CreateServices(repository, policy);
+        var handler = services.GetRequiredService<
+            ICommandHandler<ChangeOrganizationMembershipCommand, OrganizationMembershipDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationMembership owner = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Owner);
+        OrganizationMembership member = repository.Memberships.Single(
+            item => item.Role == DomainMembershipRole.Member);
+
+        var result = await handler.HandleAsync(
+            new ChangeOrganizationMembershipCommand(
+                organization.Id,
+                Guid.Empty,
+                member.SubjectId,
+                OrganizationMembershipAction.Suspend,
+                organization.Version,
+                member.Version,
+                owner.SubjectId,
+                "user:owner"),
+            CancellationToken.None);
+
+        Assert.Equal(
+            OrganizationApplicationErrors.MutationOperationRequired,
+            result.Error);
+        Assert.Equal(1, member.Version);
+        Assert.Equal(0, policy.CallCount);
     }
 
     [Fact]
@@ -215,7 +504,7 @@ public sealed class MembershipGovernanceHandlerTests
         OrganizationMembership member = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Member);
 
         var result = await handler.HandleAsync(new ChangeOrganizationMembershipCommand(
-            organization.Id, member.SubjectId, OrganizationMembershipAction.Remove,
+            organization.Id, Guid.NewGuid(), member.SubjectId, OrganizationMembershipAction.Remove,
             organization.Version, member.Version, owner.SubjectId, "user:owner"), CancellationToken.None);
 
         Assert.Equal(OrganizationApplicationErrors.MembershipChangeRejected, result.Error);
@@ -240,7 +529,7 @@ public sealed class MembershipGovernanceHandlerTests
         OrganizationMembership member = repository.Memberships.Single(item => item.Role == DomainMembershipRole.Member);
 
         var result = await handler.HandleAsync(new ChangeOrganizationMembershipCommand(
-            organization.Id, member.SubjectId, OrganizationMembershipAction.Suspend,
+            organization.Id, Guid.NewGuid(), member.SubjectId, OrganizationMembershipAction.Suspend,
             organization.Version, member.Version, owner.SubjectId, "user:owner"), CancellationToken.None);
 
         Assert.Equal(OrganizationApplicationErrors.MembershipChangeRejected, result.Error);
@@ -267,6 +556,23 @@ public sealed class MembershipGovernanceHandlerTests
         return repository;
     }
 
+    private static void PromoteToOwner(
+        Organization organization,
+        OrganizationMembership membership)
+    {
+        DateTimeOffset changedAtUtc = Now.AddSeconds(1);
+        Assert.True(membership.PromoteToOwner(
+            membership.Version,
+            "system:setup",
+            Guid.NewGuid(),
+            changedAtUtc).IsSuccess);
+        Assert.True(organization.AddActiveOwner(
+            organization.Version,
+            "system:setup",
+            Guid.NewGuid(),
+            changedAtUtc).IsSuccess);
+    }
+
     private static ServiceProvider CreateServices(
         TestRepository repository,
         params IOrganizationMembershipChangePolicy[] membershipChangePolicies)
@@ -290,11 +596,13 @@ public sealed class MembershipGovernanceHandlerTests
         : IOrganizationMembershipChangePolicy
     {
         public OrganizationMembershipChangePolicyRequest? Request { get; private set; }
+        public int CallCount { get; private set; }
 
         public ValueTask<OrganizationMembershipChangePolicyDecision> EvaluateAsync(
             OrganizationMembershipChangePolicyRequest request,
             CancellationToken cancellationToken = default)
         {
+            this.CallCount++;
             this.Request = request;
             return ValueTask.FromResult(decision);
         }

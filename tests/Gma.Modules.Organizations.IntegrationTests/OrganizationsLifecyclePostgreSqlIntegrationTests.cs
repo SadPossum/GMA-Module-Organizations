@@ -29,6 +29,7 @@ using InvitationExpiredIntegrationEvent =
 using LinkExpiredIntegrationEvent =
     Gma.Modules.Organizations.Contracts.OrganizationEnrollmentLinkExpiredIntegrationEvent;
 using OrganizationDto = Gma.Modules.Organizations.Contracts.OrganizationDto;
+using OrganizationMembershipDto = Gma.Modules.Organizations.Contracts.OrganizationMembershipDto;
 
 [Trait("Category", "Docker")]
 [Trait("Category", "Integration")]
@@ -171,6 +172,70 @@ public sealed class OrganizationsLifecyclePostgreSqlIntegrationTests
     }
 
     [DockerFact]
+    public async Task Membership_mutation_retry_proof_survives_commit_reload_and_self_authority_loss()
+    {
+        await using PostgreSqlContainer postgreSql =
+            new PostgreSqlBuilder("postgres:16-alpine")
+                .WithDatabase("membership_mutation_retry_tests")
+                .Build();
+        await postgreSql.StartAsync();
+        await using ServiceProvider provider = CreateProvider(
+            postgreSql.GetConnectionString());
+        await MigrateAsync(provider);
+        Guid organizationId = Guid.NewGuid();
+        (long organizationVersion, long membershipVersion) =
+            await SeedOrganizationWithTwoOwnersAsync(provider, organizationId);
+        Guid operationId = Guid.NewGuid();
+        ChangeOrganizationMembershipCommand command = new(
+            organizationId,
+            operationId,
+            "owner",
+            OrganizationMembershipAction.Suspend,
+            organizationVersion,
+            membershipVersion,
+            "owner",
+            "user:owner");
+
+        Result<OrganizationMembershipDto> first = await DispatchAsync(
+            provider,
+            command);
+        Assert.True(first.IsSuccess, first.Error.Code);
+        int outboxAfterFirst = await CountOutboxAsync(provider);
+
+        Result<OrganizationMembershipDto> replay = await DispatchAsync(
+            provider,
+            command);
+
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(first.Value.Version, replay.Value.Version);
+        Assert.Equal(outboxAfterFirst, await CountOutboxAsync(provider));
+
+        await using AsyncServiceScope verificationScope = provider.CreateAsyncScope();
+        OrganizationsDbContext verification = verificationScope.ServiceProvider
+            .GetRequiredService<OrganizationsDbContext>();
+        Organization storedOrganization = await verification.Organizations
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == organizationId);
+        OrganizationMembership storedMembership = await verification.Memberships
+            .AsNoTracking()
+            .SingleAsync(item =>
+                item.OrganizationId == organizationId &&
+                item.SubjectId == "owner");
+        Assert.Equal(1, storedOrganization.ActiveOwnerCount);
+        Assert.Equal(operationId, storedOrganization.LastMutationOperationId);
+        Assert.Equal(
+            OrganizationChangeKind.OwnerCountChanged,
+            storedOrganization.LastMutationKind);
+        Assert.Equal(
+            OrganizationMembershipState.Suspended,
+            storedMembership.Status);
+        Assert.Equal(operationId, storedMembership.LastMutationOperationId);
+        Assert.Equal(
+            OrganizationMembershipChangeKind.Suspended,
+            storedMembership.LastMutationKind);
+    }
+
+    [DockerFact]
     public async Task Organization_mutation_retry_proof_survives_commit_and_reload()
     {
         await using PostgreSqlContainer postgreSql =
@@ -299,6 +364,47 @@ public sealed class OrganizationsLifecyclePostgreSqlIntegrationTests
             Now).Value;
         dbContext.AddRange(organization, owner);
         await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task<(long OrganizationVersion, long MembershipVersion)>
+        SeedOrganizationWithTwoOwnersAsync(
+            ServiceProvider provider,
+            Guid organizationId)
+    {
+        await using AsyncServiceScope scope = provider.CreateAsyncScope();
+        OrganizationsDbContext dbContext = scope.ServiceProvider
+            .GetRequiredService<OrganizationsDbContext>();
+        Organization organization = Organization.Create(
+            organizationId,
+            "Membership Retry House",
+            "membership-retry-house",
+            "user:owner",
+            Guid.NewGuid(),
+            Now).Value;
+        OrganizationMembership owner = OrganizationMembership.Create(
+            Guid.NewGuid(),
+            organizationId,
+            "owner",
+            OrganizationMembershipRole.Owner,
+            "user:owner",
+            Guid.NewGuid(),
+            Now).Value;
+        OrganizationMembership secondOwner = OrganizationMembership.Create(
+            Guid.NewGuid(),
+            organizationId,
+            "second-owner",
+            OrganizationMembershipRole.Owner,
+            "system:setup",
+            Guid.NewGuid(),
+            Now).Value;
+        Assert.True(organization.AddActiveOwner(
+            organization.Version,
+            "system:setup",
+            Guid.NewGuid(),
+            Now).IsSuccess);
+        dbContext.AddRange(organization, owner, secondOwner);
+        await dbContext.SaveChangesAsync();
+        return (organization.Version, owner.Version);
     }
 
     private static async Task<int> CountOutboxAsync(ServiceProvider provider)

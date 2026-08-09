@@ -37,6 +37,18 @@ public sealed partial class Organization
             actorId) &&
         this.Status == resultingState;
 
+    public bool IsExactOwnerCountMutationReplay(
+        Guid operationId,
+        long expectedVersion,
+        string actorId,
+        DateTimeOffset changedAtUtc) =>
+        this.IsExactMutationReplay(
+            operationId,
+            OrganizationChangeKind.OwnerCountChanged,
+            expectedVersion,
+            actorId) &&
+        this.LastChangedAtUtc == changedAtUtc;
+
     private bool IsExactMutationReplay(
         Guid operationId,
         OrganizationChangeKind mutationKind,
