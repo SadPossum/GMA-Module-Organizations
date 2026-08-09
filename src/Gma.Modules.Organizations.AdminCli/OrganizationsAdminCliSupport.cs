@@ -20,6 +20,12 @@ internal static class OrganizationsAdminCliSupport
         Required = true
     };
 
+    public static Option<Guid> OperationIdOption() => new("--operation-id")
+    {
+        Description = "Stable operation id retained for unchanged retries.",
+        Required = true
+    };
+
     public static string Actor(IServiceProvider provider) =>
         "admin:" + (provider.GetRequiredService<IAdminActorContext>().Actor?.Id ?? "unknown");
 

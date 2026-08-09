@@ -28,6 +28,7 @@ using InvitationExpiredIntegrationEvent =
     Gma.Modules.Organizations.Contracts.OrganizationInvitationExpiredIntegrationEvent;
 using LinkExpiredIntegrationEvent =
     Gma.Modules.Organizations.Contracts.OrganizationEnrollmentLinkExpiredIntegrationEvent;
+using OrganizationDto = Gma.Modules.Organizations.Contracts.OrganizationDto;
 
 [Trait("Category", "Docker")]
 [Trait("Category", "Integration")]
@@ -169,6 +170,79 @@ public sealed class OrganizationsLifecyclePostgreSqlIntegrationTests
             item => item.Id == linkId);
     }
 
+    [DockerFact]
+    public async Task Organization_mutation_retry_proof_survives_commit_and_reload()
+    {
+        await using PostgreSqlContainer postgreSql =
+            new PostgreSqlBuilder("postgres:16-alpine")
+                .WithDatabase("organization_mutation_retry_tests")
+                .Build();
+        await postgreSql.StartAsync();
+        await using ServiceProvider provider = CreateProvider(
+            postgreSql.GetConnectionString());
+        await MigrateAsync(provider);
+        Guid organizationId = Guid.NewGuid();
+        await SeedOrganizationAsync(provider, organizationId);
+        Guid profileOperationId = Guid.NewGuid();
+        UpdateOrganizationCommand profile = new(
+            organizationId,
+            profileOperationId,
+            "Retry House Updated",
+            "retry-house-updated",
+            ExpectedVersion: 1,
+            "owner",
+            "user:owner");
+
+        Result<OrganizationDto> firstProfile = await DispatchAsync(
+            provider,
+            profile);
+        Assert.True(firstProfile.IsSuccess, firstProfile.Error.Code);
+        int outboxAfterProfile = await CountOutboxAsync(provider);
+        Result<OrganizationDto> profileReplay = await DispatchAsync(
+            provider,
+            profile);
+
+        Assert.True(profileReplay.IsSuccess, profileReplay.Error.Code);
+        Assert.Equal(firstProfile.Value.Version, profileReplay.Value.Version);
+        Assert.Equal(outboxAfterProfile, await CountOutboxAsync(provider));
+
+        Guid lifecycleOperationId = Guid.NewGuid();
+        ChangeOrganizationLifecycleCommand lifecycle = new(
+            organizationId,
+            lifecycleOperationId,
+            OrganizationLifecycleAction.Suspend,
+            firstProfile.Value.Version,
+            "owner",
+            "user:owner");
+        Result<OrganizationDto> firstLifecycle = await DispatchAsync(
+            provider,
+            lifecycle);
+        Assert.True(firstLifecycle.IsSuccess, firstLifecycle.Error.Code);
+        int outboxAfterLifecycle = await CountOutboxAsync(provider);
+        Result<OrganizationDto> lifecycleReplay = await DispatchAsync(
+            provider,
+            lifecycle);
+        Result<OrganizationDto> changedReuse = await DispatchAsync(
+            provider,
+            lifecycle with { Action = OrganizationLifecycleAction.Reactivate });
+
+        Assert.True(lifecycleReplay.IsSuccess, lifecycleReplay.Error.Code);
+        Assert.Equal(firstLifecycle.Value.Version, lifecycleReplay.Value.Version);
+        Assert.Equal(outboxAfterLifecycle, await CountOutboxAsync(provider));
+        Assert.Equal(
+            OrganizationApplicationErrors.MutationOperationConflict,
+            changedReuse.Error);
+
+        await using AsyncServiceScope verificationScope = provider.CreateAsyncScope();
+        OrganizationsDbContext verification = verificationScope.ServiceProvider
+            .GetRequiredService<OrganizationsDbContext>();
+        Organization stored = await verification.Organizations
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == organizationId);
+        Assert.Equal(lifecycleOperationId, stored.LastMutationOperationId);
+        Assert.Equal(OrganizationChangeKind.Suspended, stored.LastMutationKind);
+    }
+
     private static async Task<(Guid InvitationId, Guid LinkId, Guid ClaimId)> SeedDueRecordsAsync(
         ServiceProvider provider)
     {
@@ -199,6 +273,41 @@ public sealed class OrganizationsLifecyclePostgreSqlIntegrationTests
         dbContext.AddRange(organization, owner, invitation, link, claim);
         await dbContext.SaveChangesAsync();
         return (invitation.Id, link.Id, claim.Id);
+    }
+
+    private static async Task SeedOrganizationAsync(
+        ServiceProvider provider,
+        Guid organizationId)
+    {
+        await using AsyncServiceScope scope = provider.CreateAsyncScope();
+        OrganizationsDbContext dbContext = scope.ServiceProvider
+            .GetRequiredService<OrganizationsDbContext>();
+        Organization organization = Organization.Create(
+            organizationId,
+            "Retry House",
+            "retry-house",
+            "user:owner",
+            Guid.NewGuid(),
+            Now).Value;
+        OrganizationMembership owner = OrganizationMembership.Create(
+            Guid.NewGuid(),
+            organizationId,
+            "owner",
+            OrganizationMembershipRole.Owner,
+            "user:owner",
+            Guid.NewGuid(),
+            Now).Value;
+        dbContext.AddRange(organization, owner);
+        await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task<int> CountOutboxAsync(ServiceProvider provider)
+    {
+        await using AsyncServiceScope scope = provider.CreateAsyncScope();
+        return await scope.ServiceProvider
+            .GetRequiredService<OrganizationsDbContext>()
+            .OutboxMessages
+            .CountAsync();
     }
 
     private static async Task<(Guid OrganizationId, Guid LinkId, Guid ClaimId, long ClaimVersion)>

@@ -7,9 +7,15 @@ public sealed record CreateOrganizationRequest(
     string Name,
     string Slug);
 
-public sealed record UpdateOrganizationRequest(string Name, string Slug, long ExpectedVersion);
+public sealed record UpdateOrganizationRequest(
+    Guid OperationId,
+    string Name,
+    string Slug,
+    long ExpectedVersion);
 
-public sealed record OrganizationLifecycleRequest(long ExpectedVersion);
+public sealed record OrganizationLifecycleRequest(
+    Guid OperationId,
+    long ExpectedVersion);
 
 public sealed record OrganizationMembershipLifecycleRequest(
     string TargetSubjectId,

@@ -19,11 +19,13 @@ internal static class OrganizationRecoveryCommands
         bool requiresConfirmation)
     {
         Option<Guid> organizationId = OrganizationsAdminCliSupport.OrganizationIdOption();
+        Option<Guid> operationId = OrganizationsAdminCliSupport.OperationIdOption();
         Option<long> expectedVersion = OrganizationsAdminCliSupport.ExpectedVersionOption();
         Option<bool> yes = new("--yes") { Description = "Confirm the operation." };
         Command command = new(name, $"{char.ToUpperInvariant(name[0])}{name[1..]} an organization.")
         {
             organizationId,
+            operationId,
             expectedVersion,
             yes
         };
@@ -40,6 +42,7 @@ internal static class OrganizationRecoveryCommands
                         : await provider.GetRequiredService<IRequestDispatcher>().SendAsync(
                             new ChangeOrganizationLifecycleForAdministrationCommand(
                                 parseResult.GetRequiredValue(organizationId),
+                                parseResult.GetRequiredValue(operationId),
                                 ParseLifecycle(name),
                                 parseResult.GetRequiredValue(expectedVersion),
                                 OrganizationsAdminCliSupport.Actor(provider)), token).ConfigureAwait(false);

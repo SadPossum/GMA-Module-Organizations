@@ -7,7 +7,7 @@ using Gma.Modules.Organizations.Domain.Errors;
 using Gma.Modules.Organizations.Domain.Events;
 using Gma.Modules.Organizations.Domain.ValueObjects;
 
-public sealed class Organization : AggregateRoot<Guid>
+public sealed partial class Organization : AggregateRoot<Guid>
 {
     private Organization() { }
     private Organization(Guid id) : base(id) { }
@@ -23,6 +23,8 @@ public sealed class Organization : AggregateRoot<Guid>
     public DateTimeOffset CreatedAtUtc { get; private set; }
     public string LastChangedBy { get; private set; } = string.Empty;
     public DateTimeOffset LastChangedAtUtc { get; private set; }
+    public Guid? LastMutationOperationId { get; private set; }
+    public OrganizationChangeKind? LastMutationKind { get; private set; }
 
     public static Result<Organization> Create(
         Guid id,
@@ -94,9 +96,16 @@ public sealed class Organization : AggregateRoot<Guid>
         string slug,
         long expectedVersion,
         string actorId,
+        Guid operationId,
         Guid eventId,
         DateTimeOffset nowUtc)
     {
+        Result operation = ValidateMutationOperation(operationId);
+        if (operation.IsFailure)
+        {
+            return operation;
+        }
+
         Result mutable = this.EnsureMutable(expectedVersion, actorId, eventId);
         if (mutable.IsFailure)
         {
@@ -117,13 +126,28 @@ public sealed class Organization : AggregateRoot<Guid>
 
         this.Name = organizationName.Value.Value;
         this.Slug = organizationSlug.Value.Value;
-        this.Advance(actorId, nowUtc);
+        this.Advance(
+            actorId,
+            nowUtc,
+            operationId,
+            OrganizationChangeKind.ProfileUpdated);
         this.RaiseChange(eventId, nowUtc, OrganizationChangeKind.ProfileUpdated);
         return Result.Success();
     }
 
-    public Result Suspend(long expectedVersion, string actorId, Guid eventId, DateTimeOffset nowUtc)
+    public Result Suspend(
+        long expectedVersion,
+        string actorId,
+        Guid operationId,
+        Guid eventId,
+        DateTimeOffset nowUtc)
     {
+        Result operation = ValidateMutationOperation(operationId);
+        if (operation.IsFailure)
+        {
+            return operation;
+        }
+
         Result mutable = this.EnsureMutable(expectedVersion, actorId, eventId);
         if (mutable.IsFailure)
         {
@@ -136,13 +160,28 @@ public sealed class Organization : AggregateRoot<Guid>
         }
 
         this.Status = OrganizationState.Suspended;
-        this.Advance(actorId, nowUtc);
+        this.Advance(
+            actorId,
+            nowUtc,
+            operationId,
+            OrganizationChangeKind.Suspended);
         this.RaiseChange(eventId, nowUtc, OrganizationChangeKind.Suspended);
         return Result.Success();
     }
 
-    public Result Reactivate(long expectedVersion, string actorId, Guid eventId, DateTimeOffset nowUtc)
+    public Result Reactivate(
+        long expectedVersion,
+        string actorId,
+        Guid operationId,
+        Guid eventId,
+        DateTimeOffset nowUtc)
     {
+        Result operation = ValidateMutationOperation(operationId);
+        if (operation.IsFailure)
+        {
+            return operation;
+        }
+
         Result mutable = this.EnsureMutable(expectedVersion, actorId, eventId);
         if (mutable.IsFailure)
         {
@@ -155,13 +194,28 @@ public sealed class Organization : AggregateRoot<Guid>
         }
 
         this.Status = OrganizationState.Active;
-        this.Advance(actorId, nowUtc);
+        this.Advance(
+            actorId,
+            nowUtc,
+            operationId,
+            OrganizationChangeKind.Reactivated);
         this.RaiseChange(eventId, nowUtc, OrganizationChangeKind.Reactivated);
         return Result.Success();
     }
 
-    public Result Archive(long expectedVersion, string actorId, Guid eventId, DateTimeOffset nowUtc)
+    public Result Archive(
+        long expectedVersion,
+        string actorId,
+        Guid operationId,
+        Guid eventId,
+        DateTimeOffset nowUtc)
     {
+        Result operation = ValidateMutationOperation(operationId);
+        if (operation.IsFailure)
+        {
+            return operation;
+        }
+
         Result mutable = this.EnsureMutable(expectedVersion, actorId, eventId);
         if (mutable.IsFailure)
         {
@@ -174,7 +228,11 @@ public sealed class Organization : AggregateRoot<Guid>
         }
 
         this.Status = OrganizationState.Archived;
-        this.Advance(actorId, nowUtc);
+        this.Advance(
+            actorId,
+            nowUtc,
+            operationId,
+            OrganizationChangeKind.Archived);
         this.RaiseChange(eventId, nowUtc, OrganizationChangeKind.Archived);
         return Result.Success();
     }
@@ -254,11 +312,17 @@ public sealed class Organization : AggregateRoot<Guid>
             : Result.Failure(OrganizationDomainErrors.OrganizationNotActive);
     }
 
-    private void Advance(string actorId, DateTimeOffset nowUtc)
+    private void Advance(
+        string actorId,
+        DateTimeOffset nowUtc,
+        Guid? mutationOperationId = null,
+        OrganizationChangeKind? mutationKind = null)
     {
         this.Version++;
         this.LastChangedBy = actorId.Trim();
         this.LastChangedAtUtc = nowUtc;
+        this.LastMutationOperationId = mutationOperationId;
+        this.LastMutationKind = mutationKind;
     }
 
     private void RaiseChange(Guid eventId, DateTimeOffset nowUtc, OrganizationChangeKind changeKind) =>

@@ -52,6 +52,8 @@ Applicant-owned withdrawal of pending approval requests is tracked in
 [Organizations Join-Request Withdrawal Task](organizations-join-request-withdrawal-task.md).
 Retry safety for the three-aggregate ownership handoff is tracked in
 [Organizations Ownership Transfer Retry Safety Task](organizations-ownership-transfer-retry-safety-task.md).
+Retry safety for profile and lifecycle mutations is tracked in
+[Organizations Profile And Lifecycle Retry Safety Task](organizations-profile-lifecycle-retry-safety-task.md).
 Truthful bounded continuation across Organizations directories is tracked in
 [Organizations Truthful Pagination Task](organizations-truthful-pagination-task.md).
 Cross-provider ordinal storage for case-preserving subject and actor identifiers
@@ -156,6 +158,12 @@ Self-service organization creation requires a caller-owned non-empty operation
 id. Keep that id for retries of the same normalized name and slug; exact
 replays return the current organization and active initial membership, while
 changed reuse fails with `Organizations.CreationOperationConflict`.
+
+Profile and lifecycle mutations also require a caller-owned operation id.
+Organizations retains a bounded proof for the immediately preceding
+organization-root mutation, so an unchanged lost-response retry returns the
+committed state without rerunning product admission or publishing another
+event. A later root mutation invalidates that proof and callers must refetch.
 
 Natural lifecycle processing and domain retention are disabled by default. Enable
 both deliberately on one host responsible for Organizations maintenance.

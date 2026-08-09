@@ -32,6 +32,8 @@ public static class OrganizationApplicationErrors
     public static readonly Error JoinAdmissionRejected = new("Organizations.JoinAdmissionRejected", "The product is not ready to admit this subject.");
     public static readonly Error MutationRejected = new("Organizations.MutationRejected", "The organization mutation is not currently permitted.");
     public static readonly Error MutationAdmissionUnavailable = new("Organizations.MutationAdmissionUnavailable", "Organization mutation admission is temporarily unavailable.");
+    public static Error MutationOperationRequired => OrganizationDomainErrors.MutationOperationRequired;
+    public static readonly Error MutationOperationConflict = new("Organizations.MutationOperationConflict", "The organization mutation operation id is already bound to different inputs.");
     public static readonly Error JoinSourceIdRequired = new("Organizations.JoinSourceIdRequired", "A join-source id is required.");
     public static readonly Error JoinSourceIssuanceConflict = new("Organizations.JoinSourceIssuanceConflict", "The join-source id is already bound to different issuance inputs.");
     public static readonly Error JoinSourceManagementRequired = new("Organizations.JoinSourceManagementRequired", "An active organization owner or authorized join-source manager is required.");

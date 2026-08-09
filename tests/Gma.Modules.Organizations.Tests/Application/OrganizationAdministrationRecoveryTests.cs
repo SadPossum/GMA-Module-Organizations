@@ -55,12 +55,47 @@ public sealed class OrganizationAdministrationRecoveryTests
             ChangeOrganizationLifecycleForAdministrationCommand, OrganizationDto>>();
 
         var result = await handler.HandleAsync(new ChangeOrganizationLifecycleForAdministrationCommand(
-            organization.Id, OrganizationLifecycleAction.Archive,
+            organization.Id, Guid.NewGuid(), OrganizationLifecycleAction.Archive,
             organization.Version, "admin:operator"), CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(OrganizationDomainErrors.OrganizationNotSuspended, result.Error);
         Assert.Equal(Gma.Modules.Organizations.Domain.Enums.OrganizationState.Active, organization.Status);
+    }
+
+    [Fact]
+    public async Task Administration_lifecycle_retry_returns_the_committed_state_once()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        Organization organization = Assert.Single(repository.Organizations);
+        using ServiceProvider services = CreateServices(repository);
+        var handler = services.GetRequiredService<ICommandHandler<
+            ChangeOrganizationLifecycleForAdministrationCommand,
+            OrganizationDto>>();
+        ChangeOrganizationLifecycleForAdministrationCommand command = new(
+            organization.Id,
+            Guid.NewGuid(),
+            OrganizationLifecycleAction.Suspend,
+            organization.Version,
+            "admin:operator");
+
+        var first = await handler.HandleAsync(command, CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error.Code);
+        long version = organization.Version;
+        int eventCount = organization.DomainEvents.Count;
+
+        var replay = await handler.HandleAsync(command, CancellationToken.None);
+        var changedReuse = await handler.HandleAsync(
+            command with { Action = OrganizationLifecycleAction.Reactivate },
+            CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(OrganizationStatus.Suspended, replay.Value.Status);
+        Assert.Equal(version, organization.Version);
+        Assert.Equal(eventCount, organization.DomainEvents.Count);
+        Assert.Equal(
+            OrganizationApplicationErrors.MutationOperationConflict,
+            changedReuse.Error);
     }
 
     private static TestOrganizationRepository CreateRepository()

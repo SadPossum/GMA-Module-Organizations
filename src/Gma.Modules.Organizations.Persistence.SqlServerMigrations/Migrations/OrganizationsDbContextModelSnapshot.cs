@@ -180,6 +180,12 @@ namespace Gma.Modules.Organizations.Persistence.SqlServerMigrations.Migrations
                         .HasColumnType("nvarchar(192)")
                         .UseCollation("Latin1_General_100_BIN2");
 
+                    b.Property<int?>("LastMutationKind")
+                        .HasColumnType("int");
+
+                    b.Property<Guid?>("LastMutationOperationId")
+                        .HasColumnType("uniqueidentifier");
+
                     b.Property<string>("Name")
                         .IsRequired()
                         .HasMaxLength(160)

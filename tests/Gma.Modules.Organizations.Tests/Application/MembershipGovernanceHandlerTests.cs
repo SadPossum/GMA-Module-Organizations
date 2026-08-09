@@ -154,7 +154,7 @@ public sealed class MembershipGovernanceHandlerTests
         Assert.True((await handler.HandleAsync(command, CancellationToken.None)).IsSuccess);
         Assert.True(organization.UpdateProfile(
             "Harbor House Updated", "harbor-house-updated", organization.Version,
-            "user:member", Guid.NewGuid(), Now.AddMinutes(2)).IsSuccess);
+            "user:member", Guid.NewGuid(), Guid.NewGuid(), Now.AddMinutes(2)).IsSuccess);
         int organizationEventCount = organization.DomainEvents.Count;
 
         var replay = await handler.HandleAsync(command, CancellationToken.None);

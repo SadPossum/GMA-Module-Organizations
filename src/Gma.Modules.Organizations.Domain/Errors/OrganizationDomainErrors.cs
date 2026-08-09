@@ -12,6 +12,7 @@ public static class OrganizationDomainErrors
     public static readonly Error SubjectInvalid = new("Organizations.SubjectInvalid", "The subject id is invalid.");
     public static readonly Error ActorInvalid = new("Organizations.ActorInvalid", "The actor id is invalid.");
     public static readonly Error EventIdRequired = new("Organizations.EventIdRequired", "A domain event id is required.");
+    public static readonly Error MutationOperationRequired = new("Organizations.MutationOperationRequired", "An organization mutation operation id is required.");
     public static readonly Error VersionConflict = new("Organizations.VersionConflict", "The record version has changed.");
     public static readonly Error OrganizationNotActive = new("Organizations.OrganizationNotActive", "The organization is not active.");
     public static readonly Error OrganizationAlreadySuspended = new("Organizations.OrganizationAlreadySuspended", "The organization is already suspended.");

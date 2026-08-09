@@ -9,6 +9,7 @@ using Gma.Modules.Organizations.Application.Mapping;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
+using Gma.Modules.Organizations.Domain.ValueObjects;
 
 internal sealed class ChangeOrganizationLifecycleForAdministrationCommandHandler(
     IOrganizationRepository organizations,
@@ -21,6 +22,20 @@ internal sealed class ChangeOrganizationLifecycleForAdministrationCommandHandler
         ChangeOrganizationLifecycleForAdministrationCommand command,
         CancellationToken cancellationToken)
     {
+        if (command.OperationId == Guid.Empty)
+        {
+            return Result.Failure<OrganizationDto>(
+                OrganizationApplicationErrors.MutationOperationRequired);
+        }
+
+        if (!OrganizationLifecycleMutation.TryResolve(
+                command.Action,
+                out OrganizationLifecycleMutation mutation))
+        {
+            return Result.Failure<OrganizationDto>(
+                OrganizationApplicationErrors.OrganizationLifecycleActionInvalid);
+        }
+
         await governance.AcquireExclusiveAsync(
             command.OrganizationId,
             cancellationToken).ConfigureAwait(false);
@@ -32,16 +47,40 @@ internal sealed class ChangeOrganizationLifecycleForAdministrationCommandHandler
             return Result.Failure<OrganizationDto>(OrganizationApplicationErrors.OrganizationNotFound);
         }
 
-        Result changed = command.Action switch
+        Result<OrganizationActorId> actor = OrganizationActorId.Create(
+            command.ActorId);
+        if (actor.IsFailure)
         {
-            OrganizationLifecycleAction.Suspend => organization.Suspend(
-                command.ExpectedVersion, command.ActorId, ids.NewId(), clock.UtcNow),
-            OrganizationLifecycleAction.Reactivate => organization.Reactivate(
-                command.ExpectedVersion, command.ActorId, ids.NewId(), clock.UtcNow),
-            OrganizationLifecycleAction.Archive => organization.Archive(
-                command.ExpectedVersion, command.ActorId, ids.NewId(), clock.UtcNow),
-            _ => Result.Failure(OrganizationApplicationErrors.OrganizationLifecycleActionInvalid)
-        };
+            return Result.Failure<OrganizationDto>(actor.Error);
+        }
+
+        if (organization.HasLastMutationOperation(command.OperationId))
+        {
+            return mutation.IsExactReplay(
+                organization,
+                command.OperationId,
+                command.ExpectedVersion,
+                actor.Value.Value)
+                ? Result.Success(organization.ToDto())
+                : Result.Failure<OrganizationDto>(
+                    OrganizationApplicationErrors.MutationOperationConflict);
+        }
+
+        if (organization.Version != command.ExpectedVersion)
+        {
+            return Result.Failure<OrganizationDto>(
+                OrganizationApplicationErrors.VersionConflict);
+        }
+
+        Guid eventId = ids.NewId();
+        DateTimeOffset nowUtc = clock.UtcNow;
+        Result changed = mutation.Apply(
+            organization,
+            command.ExpectedVersion,
+            actor.Value.Value,
+            command.OperationId,
+            eventId,
+            nowUtc);
         return changed.IsSuccess
             ? Result.Success(organization.ToDto())
             : Result.Failure<OrganizationDto>(changed.Error);

@@ -31,6 +31,8 @@ internal sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organ
         builder.Property(organization => organization.LastChangedBy)
             .HasMaxLength(OrganizationActorId.MaxLength)
             .IsRequired();
+        builder.Property(organization => organization.LastMutationKind)
+            .HasConversion<int?>();
         builder.HasIndex(organization => new { organization.Status, organization.Slug });
     }
 }

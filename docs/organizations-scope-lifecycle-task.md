@@ -58,9 +58,11 @@ artifact.
 
 Invitation and enrollment token digests are credentials, not portable data,
 and are never exported. Inbox/outbox rows are transport journals and are also
-excluded. Actor and subject identifiers, recipient email, lifecycle state,
-versions, counts, and timestamps remain explicit typed fields so a product can
-classify them rather than receiving opaque JSON.
+excluded. Creation fingerprints and last-mutation retry proofs are internal
+control metadata rather than portable data and are excluded as well. Actor and
+subject identifiers, recipient email, lifecycle state, versions, counts, and
+timestamps remain explicit typed fields so a product can classify them rather
+than receiving opaque JSON.
 
 ## Admission And Consistency
 

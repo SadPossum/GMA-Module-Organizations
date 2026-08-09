@@ -5,6 +5,7 @@ using Gma.Modules.Organizations.Contracts;
 
 public sealed record UpdateOrganizationCommand(
     Guid OrganizationId,
+    Guid OperationId,
     string Name,
     string Slug,
     long ExpectedVersion,

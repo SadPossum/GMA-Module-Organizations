@@ -36,6 +36,7 @@ public sealed class OrganizationGovernanceCoordinationTests
         var result = await handler.HandleAsync(
             new UpdateOrganizationCommand(
                 organization.Id,
+                Guid.NewGuid(),
                 "Harbor House Updated",
                 "harbor-house-updated",
                 organization.Version,

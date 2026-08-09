@@ -396,7 +396,7 @@ public sealed class OrganizationInvitationFlowTests
             services, organization, null, 24);
         clock.UtcNow = Now.AddMinutes(1);
         Assert.True(organization.Suspend(
-            organization.Version, "user:owner", Guid.NewGuid(), clock.UtcNow).IsSuccess);
+            organization.Version, "user:owner", Guid.NewGuid(), Guid.NewGuid(), clock.UtcNow).IsSuccess);
 
         Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> replacement =
             await reissue.HandleAsync(

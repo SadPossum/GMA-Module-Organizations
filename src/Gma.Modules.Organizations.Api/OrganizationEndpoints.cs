@@ -93,7 +93,8 @@ internal static class OrganizationEndpoints
             }
 
             return (await dispatcher.SendAsync(new UpdateOrganizationCommand(
-                organizationId, request.Name, request.Slug, request.ExpectedVersion,
+                organizationId, request.OperationId, request.Name, request.Slug,
+                request.ExpectedVersion,
                 subjectId, OrganizationEndpointSupport.Actor(subjectId)), token)
                 .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
         }).Produces<OrganizationDto>(StatusCodes.Status200OK);
@@ -125,7 +126,7 @@ internal static class OrganizationEndpoints
             }
 
             return (await dispatcher.SendAsync(new ChangeOrganizationLifecycleCommand(
-                organizationId, action, request.ExpectedVersion,
+                organizationId, request.OperationId, action, request.ExpectedVersion,
                 subjectId, OrganizationEndpointSupport.Actor(subjectId)), token)
                 .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
         }).Produces<OrganizationDto>(StatusCodes.Status200OK);

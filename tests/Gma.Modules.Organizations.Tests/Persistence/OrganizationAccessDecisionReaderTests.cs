@@ -42,7 +42,7 @@ public sealed class OrganizationAccessDecisionReaderTests
             await reader.ReadAsync(organizationId, "member-a", CancellationToken.None));
 
         Assert.True(organization.Suspend(
-            organization.Version, "user:owner", Guid.NewGuid(), Now.AddMinutes(2)).IsSuccess);
+            organization.Version, "user:owner", Guid.NewGuid(), Guid.NewGuid(), Now.AddMinutes(2)).IsSuccess);
         await dbContext.SaveChangesAsync();
         Assert.Equal(
             OrganizationAccessDecision.OrganizationInactive,
@@ -86,7 +86,7 @@ public sealed class OrganizationAccessDecisionReaderTests
             CancellationToken.None));
 
         Assert.True(organization.Suspend(
-            organization.Version, "user:owner", Guid.NewGuid(), Now.AddMinutes(2)).IsSuccess);
+            organization.Version, "user:owner", Guid.NewGuid(), Guid.NewGuid(), Now.AddMinutes(2)).IsSuccess);
         await dbContext.SaveChangesAsync();
         Assert.Empty(await reader.FilterAllowedAsync(
             organizationId,

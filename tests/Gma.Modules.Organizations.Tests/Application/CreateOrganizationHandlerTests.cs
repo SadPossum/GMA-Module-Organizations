@@ -80,6 +80,7 @@ public sealed class CreateOrganizationHandlerTests
                 expectedVersion: 1,
                 "user:subject-a",
                 Guid.NewGuid(),
+                Guid.NewGuid(),
                 Now.AddMinutes(1)).IsSuccess);
         }
 

@@ -10,6 +10,7 @@ using Gma.Modules.Organizations.Application.Policies;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
+using Gma.Modules.Organizations.Domain.ValueObjects;
 
 internal sealed class ChangeOrganizationLifecycleCommandHandler(
     IOrganizationRepository organizations,
@@ -22,6 +23,20 @@ internal sealed class ChangeOrganizationLifecycleCommandHandler(
         ChangeOrganizationLifecycleCommand command,
         CancellationToken cancellationToken)
     {
+        if (command.OperationId == Guid.Empty)
+        {
+            return Result.Failure<OrganizationDto>(
+                OrganizationApplicationErrors.MutationOperationRequired);
+        }
+
+        if (!OrganizationLifecycleMutation.TryResolve(
+                command.Action,
+                out OrganizationLifecycleMutation mutation))
+        {
+            return Result.Failure<OrganizationDto>(
+                OrganizationApplicationErrors.OrganizationLifecycleActionInvalid);
+        }
+
         await governance.AcquireExclusiveAsync(
             command.OrganizationId,
             cancellationToken).ConfigureAwait(false);
@@ -41,25 +56,34 @@ internal sealed class ChangeOrganizationLifecycleCommandHandler(
             return Result.Failure<OrganizationDto>(OrganizationApplicationErrors.OrganizationNotFound);
         }
 
-        OrganizationMutationAdmissionOperation operation = command.Action switch
+        Result<OrganizationActorId> actor = OrganizationActorId.Create(
+            command.ActorId);
+        if (actor.IsFailure)
         {
-            OrganizationLifecycleAction.Suspend =>
-                OrganizationMutationAdmissionOperation.SuspendOrganization,
-            OrganizationLifecycleAction.Reactivate =>
-                OrganizationMutationAdmissionOperation.ReactivateOrganization,
-            OrganizationLifecycleAction.Archive =>
-                OrganizationMutationAdmissionOperation.ArchiveOrganization,
-            _ => OrganizationMutationAdmissionOperation.Unknown
-        };
-        if (operation is OrganizationMutationAdmissionOperation.Unknown)
+            return Result.Failure<OrganizationDto>(actor.Error);
+        }
+
+        if (organization.HasLastMutationOperation(command.OperationId))
+        {
+            return mutation.IsExactReplay(
+                organization,
+                command.OperationId,
+                command.ExpectedVersion,
+                actor.Value.Value)
+                ? Result.Success(organization.ToDto())
+                : Result.Failure<OrganizationDto>(
+                    OrganizationApplicationErrors.MutationOperationConflict);
+        }
+
+        if (organization.Version != command.ExpectedVersion)
         {
             return Result.Failure<OrganizationDto>(
-                OrganizationApplicationErrors.OrganizationLifecycleActionInvalid);
+                OrganizationApplicationErrors.VersionConflict);
         }
 
         Result admitted = await mutationAdmission.AuthorizeAsync(
             new OrganizationMutationAdmissionContext(
-                operation,
+                mutation.AdmissionOperation,
                 command.OrganizationId,
                 command.SubjectId),
             cancellationToken).ConfigureAwait(false);
@@ -70,16 +94,13 @@ internal sealed class ChangeOrganizationLifecycleCommandHandler(
 
         Guid eventId = ids.NewId();
         DateTimeOffset nowUtc = clock.UtcNow;
-        Result changed = command.Action switch
-        {
-            OrganizationLifecycleAction.Suspend => organization.Suspend(
-                command.ExpectedVersion, command.ActorId, eventId, nowUtc),
-            OrganizationLifecycleAction.Reactivate => organization.Reactivate(
-                command.ExpectedVersion, command.ActorId, eventId, nowUtc),
-            OrganizationLifecycleAction.Archive => organization.Archive(
-                command.ExpectedVersion, command.ActorId, eventId, nowUtc),
-            _ => Result.Failure(OrganizationApplicationErrors.OrganizationLifecycleActionInvalid)
-        };
+        Result changed = mutation.Apply(
+            organization,
+            command.ExpectedVersion,
+            actor.Value.Value,
+            command.OperationId,
+            eventId,
+            nowUtc);
 
         return changed.IsSuccess
             ? Result.Success(organization.ToDto())

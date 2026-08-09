@@ -351,6 +351,7 @@ public sealed class OrganizationJoinSourceIssuancePostgreSqlIntegrationTests
                 provider,
                 new ChangeOrganizationLifecycleCommand(
                     organizationId,
+                    Guid.NewGuid(),
                     OrganizationLifecycleAction.Suspend,
                     organizationVersion,
                     "owner",
@@ -367,6 +368,7 @@ public sealed class OrganizationJoinSourceIssuancePostgreSqlIntegrationTests
             provider,
             new ChangeOrganizationLifecycleCommand(
                 organizationId,
+                Guid.NewGuid(),
                 OrganizationLifecycleAction.Reactivate,
                 organizationVersion,
                 "owner",
@@ -384,6 +386,7 @@ public sealed class OrganizationJoinSourceIssuancePostgreSqlIntegrationTests
             Result<OrganizationDto> suspended = await dispatcher.SendAsync(
                 new ChangeOrganizationLifecycleCommand(
                     organizationId,
+                    Guid.NewGuid(),
                     OrganizationLifecycleAction.Suspend,
                     organizationVersion,
                     "owner",
@@ -412,6 +415,7 @@ public sealed class OrganizationJoinSourceIssuancePostgreSqlIntegrationTests
             provider,
             new ChangeOrganizationLifecycleCommand(
                 organizationId,
+                Guid.NewGuid(),
                 OrganizationLifecycleAction.Reactivate,
                 organizationVersion,
                 "owner",

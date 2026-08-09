@@ -105,7 +105,8 @@ public sealed class OrganizationsAdminApiModule : IAdminApiModule
                 requireTenant: false,
                 token => !requiresConfirmation || request.Confirmed
                     ? dispatcher.SendAsync(new ChangeOrganizationLifecycleForAdministrationCommand(
-                        organizationId, action, request.ExpectedVersion, ResolveActor(actorContext)), token)
+                        organizationId, request.OperationId, action,
+                        request.ExpectedVersion, ResolveActor(actorContext)), token)
                     : Task.FromResult(Result.Failure<OrganizationDto>(AdminErrors.ConfirmationRequired)),
                 cancellationToken,
                 errorStatusCodes: ErrorStatusCodes).ConfigureAwait(false))
@@ -118,13 +119,18 @@ public sealed class OrganizationsAdminApiModule : IAdminApiModule
     private static readonly ApiErrorStatusCodeMap ErrorStatusCodes = ApiErrorStatusCodeMap.Create(
         new(OrganizationApplicationErrors.OrganizationNotFound.Code, StatusCodes.Status404NotFound),
         new(OrganizationApplicationErrors.MembershipNotFound.Code, StatusCodes.Status404NotFound),
+        new(OrganizationApplicationErrors.MutationOperationRequired.Code, StatusCodes.Status400BadRequest),
+        new(OrganizationApplicationErrors.MutationOperationConflict.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.VersionConflict.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.OrganizationNotActive.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.OrganizationAlreadySuspended.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.OrganizationNotSuspended.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.OrganizationArchived.Code, StatusCodes.Status409Conflict));
 
-    public sealed record ChangeOrganizationLifecycleAdminRequest(long ExpectedVersion, bool Confirmed);
+    public sealed record ChangeOrganizationLifecycleAdminRequest(
+        Guid OperationId,
+        long ExpectedVersion,
+        bool Confirmed);
 
     public sealed record EnsureOrganizationOwnerAdminRequest(
         string SubjectId,

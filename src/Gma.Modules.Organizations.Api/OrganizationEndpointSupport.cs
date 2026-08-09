@@ -39,6 +39,8 @@ internal static class OrganizationEndpointSupport
         new(OrganizationApplicationErrors.JoinAdmissionRejected.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.MutationRejected.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.MutationAdmissionUnavailable.Code, StatusCodes.Status503ServiceUnavailable),
+        new(OrganizationApplicationErrors.MutationOperationRequired.Code, StatusCodes.Status400BadRequest),
+        new(OrganizationApplicationErrors.MutationOperationConflict.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.JoinSourceIdRequired.Code, StatusCodes.Status400BadRequest),
         new(OrganizationApplicationErrors.JoinSourceIssuanceConflict.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.JoinSourceManagementRequired.Code, StatusCodes.Status403Forbidden),

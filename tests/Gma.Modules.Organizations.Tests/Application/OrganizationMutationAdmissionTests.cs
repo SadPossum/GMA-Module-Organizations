@@ -99,6 +99,7 @@ public sealed class OrganizationMutationAdmissionTests
         Result<OrganizationDto> result = await handler.HandleAsync(
             new UpdateOrganizationCommand(
                 fixture.Organization.Id,
+                Guid.NewGuid(),
                 "Changed",
                 "changed",
                 version,
@@ -114,6 +115,90 @@ public sealed class OrganizationMutationAdmissionTests
         Assert.Equal(
             OrganizationMutationAdmissionOperation.UpdateOrganization,
             Assert.Single(policy.Contexts).Operation);
+    }
+
+    [Fact]
+    public async Task Exact_profile_retry_is_stable_and_skips_product_admission()
+    {
+        RecordingMutationPolicy policy = new();
+        using Fixture fixture = CreateFixture(policy);
+        var handler = fixture.Services.GetRequiredService<
+            ICommandHandler<UpdateOrganizationCommand, OrganizationDto>>();
+        UpdateOrganizationCommand command = new(
+            fixture.Organization.Id,
+            Guid.NewGuid(),
+            "  Harbor House Updated  ",
+            "Harbor-House-Updated",
+            fixture.Organization.Version,
+            "owner",
+            "user:owner");
+
+        Result<OrganizationDto> first = await handler.HandleAsync(
+            command,
+            CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error.Code);
+        Assert.Single(policy.Contexts);
+        long version = fixture.Organization.Version;
+        int eventCount = fixture.Organization.DomainEvents.Count;
+        policy.Contexts.Clear();
+        policy.Decision = OrganizationMutationAdmissionDecision.Denied;
+
+        Result<OrganizationDto> replay = await handler.HandleAsync(
+            command,
+            CancellationToken.None);
+        Result<OrganizationDto> changedReuse = await handler.HandleAsync(
+            command with { Name = "Different" },
+            CancellationToken.None);
+        Result<OrganizationDto> staleNewAttempt = await handler.HandleAsync(
+            command with { OperationId = Guid.NewGuid() },
+            CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal("Harbor House Updated", replay.Value.Name);
+        Assert.Equal(version, fixture.Organization.Version);
+        Assert.Equal(eventCount, fixture.Organization.DomainEvents.Count);
+        Assert.Equal(
+            OrganizationApplicationErrors.MutationOperationConflict,
+            changedReuse.Error);
+        Assert.Equal(
+            OrganizationApplicationErrors.VersionConflict,
+            staleNewAttempt.Error);
+        Assert.Empty(policy.Contexts);
+    }
+
+    [Fact]
+    public async Task Later_organization_mutation_invalidates_profile_replay_proof()
+    {
+        RecordingMutationPolicy policy = new();
+        using Fixture fixture = CreateFixture(policy);
+        var handler = fixture.Services.GetRequiredService<
+            ICommandHandler<UpdateOrganizationCommand, OrganizationDto>>();
+        UpdateOrganizationCommand command = new(
+            fixture.Organization.Id,
+            Guid.NewGuid(),
+            "Harbor House Updated",
+            "harbor-house-updated",
+            fixture.Organization.Version,
+            "owner",
+            "user:owner");
+        Assert.True((await handler.HandleAsync(
+            command,
+            CancellationToken.None)).IsSuccess);
+        policy.Contexts.Clear();
+        Assert.True(fixture.Organization.AddActiveOwner(
+            fixture.Organization.Version,
+            "system:membership",
+            Guid.NewGuid(),
+            Now.AddMinutes(1)).IsSuccess);
+
+        Result<OrganizationDto> replay = await handler.HandleAsync(
+            command,
+            CancellationToken.None);
+
+        Assert.Equal(OrganizationApplicationErrors.VersionConflict, replay.Error);
+        Assert.Null(fixture.Organization.LastMutationOperationId);
+        Assert.Null(fixture.Organization.LastMutationKind);
+        Assert.Empty(policy.Contexts);
     }
 
     [Theory]
@@ -138,6 +223,7 @@ public sealed class OrganizationMutationAdmissionTests
                 fixture.Organization.Version,
                 "system:setup",
                 Guid.NewGuid(),
+                Guid.NewGuid(),
                 Now).IsSuccess);
         }
 
@@ -148,6 +234,7 @@ public sealed class OrganizationMutationAdmissionTests
         Result<OrganizationDto> result = await handler.HandleAsync(
             new ChangeOrganizationLifecycleCommand(
                 fixture.Organization.Id,
+                Guid.NewGuid(),
                 action,
                 version,
                 "owner",
@@ -158,6 +245,97 @@ public sealed class OrganizationMutationAdmissionTests
         Assert.Equal(OrganizationApplicationErrors.MutationRejected, result.Error);
         Assert.Equal(version, fixture.Organization.Version);
         Assert.Equal(operation, Assert.Single(policy.Contexts).Operation);
+    }
+
+    [Fact]
+    public async Task Exact_lifecycle_retry_is_stable_and_skips_product_admission()
+    {
+        RecordingMutationPolicy policy = new();
+        using Fixture fixture = CreateFixture(policy);
+        var handler = fixture.Services.GetRequiredService<
+            ICommandHandler<ChangeOrganizationLifecycleCommand, OrganizationDto>>();
+        ChangeOrganizationLifecycleCommand command = new(
+            fixture.Organization.Id,
+            Guid.NewGuid(),
+            OrganizationLifecycleAction.Suspend,
+            fixture.Organization.Version,
+            "owner",
+            "user:owner");
+
+        Result<OrganizationDto> first = await handler.HandleAsync(
+            command,
+            CancellationToken.None);
+        Assert.True(first.IsSuccess, first.Error.Code);
+        Assert.Single(policy.Contexts);
+        long version = fixture.Organization.Version;
+        int eventCount = fixture.Organization.DomainEvents.Count;
+        policy.Contexts.Clear();
+        policy.Decision = OrganizationMutationAdmissionDecision.Denied;
+
+        Result<OrganizationDto> replay = await handler.HandleAsync(
+            command,
+            CancellationToken.None);
+        Result<OrganizationDto> changedReuse = await handler.HandleAsync(
+            command with { Action = OrganizationLifecycleAction.Reactivate },
+            CancellationToken.None);
+        Result<OrganizationDto> staleNewAttempt = await handler.HandleAsync(
+            command with { OperationId = Guid.NewGuid() },
+            CancellationToken.None);
+
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(OrganizationStatus.Suspended, replay.Value.Status);
+        Assert.Equal(version, fixture.Organization.Version);
+        Assert.Equal(eventCount, fixture.Organization.DomainEvents.Count);
+        Assert.Equal(
+            OrganizationApplicationErrors.MutationOperationConflict,
+            changedReuse.Error);
+        Assert.Equal(
+            OrganizationApplicationErrors.VersionConflict,
+            staleNewAttempt.Error);
+        Assert.Empty(policy.Contexts);
+    }
+
+    [Theory]
+    [InlineData(true)]
+    [InlineData(false)]
+    public async Task Profile_and_lifecycle_mutations_require_an_operation_id(
+        bool profile)
+    {
+        RecordingMutationPolicy policy = new();
+        using Fixture fixture = CreateFixture(policy);
+
+        Result<OrganizationDto> result = profile
+            ? await fixture.Services.GetRequiredService<ICommandHandler<
+                    UpdateOrganizationCommand,
+                    OrganizationDto>>()
+                .HandleAsync(
+                    new UpdateOrganizationCommand(
+                        fixture.Organization.Id,
+                        Guid.Empty,
+                        "Changed",
+                        "changed",
+                        fixture.Organization.Version,
+                        "owner",
+                        "user:owner"),
+                    CancellationToken.None)
+            : await fixture.Services.GetRequiredService<ICommandHandler<
+                    ChangeOrganizationLifecycleCommand,
+                    OrganizationDto>>()
+                .HandleAsync(
+                    new ChangeOrganizationLifecycleCommand(
+                        fixture.Organization.Id,
+                        Guid.Empty,
+                        OrganizationLifecycleAction.Suspend,
+                        fixture.Organization.Version,
+                        "owner",
+                        "user:owner"),
+                    CancellationToken.None);
+
+        Assert.Equal(
+            OrganizationApplicationErrors.MutationOperationRequired,
+            result.Error);
+        Assert.Empty(policy.Contexts);
+        Assert.Equal(1, fixture.Organization.Version);
     }
 
     [Fact]

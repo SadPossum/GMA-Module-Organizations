@@ -788,10 +788,10 @@ public sealed partial class OrganizationEnrollmentFlowTests
         OrganizationEnrollmentLink link = Assert.Single(repository.EnrollmentLinks);
         clock.UtcNow = Now.AddMinutes(1);
         Assert.True(organization.Suspend(
-            organization.Version, "user:owner", Guid.NewGuid(), clock.UtcNow).IsSuccess);
+            organization.Version, "user:owner", Guid.NewGuid(), Guid.NewGuid(), clock.UtcNow).IsSuccess);
         clock.UtcNow = Now.AddMinutes(2);
         Assert.True(organization.Archive(
-            organization.Version, "user:owner", Guid.NewGuid(), clock.UtcNow).IsSuccess);
+            organization.Version, "user:owner", Guid.NewGuid(), Guid.NewGuid(), clock.UtcNow).IsSuccess);
 
         var replacement = await rotate.HandleAsync(new RotateOrganizationEnrollmentLinkCommand(
             organization.Id, link.Id, Guid.NewGuid(),

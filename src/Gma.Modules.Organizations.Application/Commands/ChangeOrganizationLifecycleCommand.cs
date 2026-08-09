@@ -13,6 +13,7 @@ public enum OrganizationLifecycleAction
 
 public sealed record ChangeOrganizationLifecycleCommand(
     Guid OrganizationId,
+    Guid OperationId,
     OrganizationLifecycleAction Action,
     long ExpectedVersion,
     string SubjectId,
