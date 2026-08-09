@@ -22,7 +22,10 @@ public sealed record TransferOrganizationOwnershipRequest(
     long ExpectedCurrentOwnerVersion,
     long ExpectedTargetVersion);
 
-public sealed record CreateOrganizationInvitationRequest(string? RecipientEmail, int? LifetimeHours);
+public sealed record CreateOrganizationInvitationRequest(
+    Guid SourceId,
+    string? RecipientEmail,
+    int? LifetimeHours);
 
 public sealed record RevokeOrganizationInvitationRequest(long ExpectedVersion);
 
@@ -33,6 +36,7 @@ public sealed record AcceptOrganizationInvitationRequest(string Token);
 public sealed record PreviewOrganizationInvitationRequest(string Token);
 
 public sealed record CreateOrganizationEnrollmentLinkRequest(
+    Guid SourceId,
     int? LifetimeHours,
     int MaximumClaims,
     OrganizationEnrollmentApprovalMode ApprovalMode);

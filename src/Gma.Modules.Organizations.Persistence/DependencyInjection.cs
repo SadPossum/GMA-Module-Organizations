@@ -84,6 +84,9 @@ public static class DependencyInjection
         builder.Services.TryAddScoped<
             IOrganizationCreationCoordinator,
             OrganizationCreationCoordinator>();
+        builder.Services.TryAddScoped<
+            IOrganizationJoinSourceIssuanceCoordinator,
+            OrganizationJoinSourceIssuanceCoordinator>();
         builder.Services.TryAddScoped<IOrganizationLifecycleRepository, OrganizationLifecycleRepository>();
         builder.Services.TryAddScoped<
             IOrganizationScopeLifecycle,

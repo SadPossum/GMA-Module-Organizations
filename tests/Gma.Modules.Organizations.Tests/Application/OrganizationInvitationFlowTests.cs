@@ -8,6 +8,7 @@ using Gma.Framework.Runtime.Time;
 using Gma.Modules.Organizations.Application;
 using Gma.Modules.Organizations.Application.Commands;
 using Gma.Modules.Organizations.Application.Ports;
+using Gma.Modules.Organizations.Api;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipRole;
@@ -106,7 +107,7 @@ public sealed class OrganizationInvitationFlowTests
     }
 
     [Fact]
-    public async Task Delegated_issuance_preserves_source_context_and_raw_issue_fails_closed()
+    public async Task Http_issuance_mapping_preserves_source_context_and_one_time_secret()
     {
         TestRepository repository = CreateRepository();
         Organization organization = Assert.Single(repository.Organizations);
@@ -127,35 +128,28 @@ public sealed class OrganizationInvitationFlowTests
         var issue = services.GetRequiredService<ICommandHandler<
             IssueOrganizationInvitationCommand,
             OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
-        var create = services.GetRequiredService<
-            ICommandHandler<CreateOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
         Guid sourceId = Guid.NewGuid();
-
-        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> issued =
-            await issue.HandleAsync(
-                new IssueOrganizationInvitationCommand(
-                    new OrganizationInvitationIssuanceRequest(
-                        sourceId,
-                        organization.Id,
-                        null,
-                        24,
-                        "manager",
-                        "user:manager")),
-                CancellationToken.None);
-        Result<OrganizationInvitationIssuedDto> raw = await create.HandleAsync(
-            new CreateOrganizationInvitationCommand(
+        IssueOrganizationInvitationCommand command = new(
+            new OrganizationInvitationIssuanceRequest(
+                sourceId,
                 organization.Id,
                 null,
                 24,
                 "manager",
-                "user:manager"),
-            CancellationToken.None);
+                "user:manager"));
+
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> issued =
+            await issue.HandleAsync(command, CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> replayResult =
+            await issue.HandleAsync(command, CancellationToken.None);
+        Result<OrganizationInvitationIssuanceDto> replay =
+            OrganizationEndpointSupport.MapInvitationIssuance(replayResult);
 
         Assert.True(issued.IsSuccess, issued.Error.Code);
-        Assert.True(raw.IsFailure);
-        Assert.Equal(
-            OrganizationApplicationErrors.JoinSourceManagementRequired,
-            raw.Error);
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.AlreadyIssued, replay.Value.Outcome);
+        Assert.Null(replay.Value.Token);
+        Assert.Equal(sourceId, replay.Value.Invitation.InvitationId);
         Assert.Collection(
             policy.Contexts,
             context =>
@@ -174,7 +168,7 @@ public sealed class OrganizationInvitationFlowTests
                     context.Operation);
                 Assert.Equal(organization.Id, context.OrganizationId);
                 Assert.Equal("manager", context.SubjectId);
-                Assert.Null(context.SourceId);
+                Assert.Equal(sourceId, context.SourceId);
             });
     }
 
@@ -184,24 +178,21 @@ public sealed class OrganizationInvitationFlowTests
         TestRepository repository = CreateRepository();
         TestClock clock = new();
         using ServiceProvider services = CreateServices(repository, clock);
-        var create = services.GetRequiredService<
-            ICommandHandler<CreateOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
         var accept = services.GetRequiredService<
             ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>>();
         Organization organization = Assert.Single(repository.Organizations);
 
-        var issued = await create.HandleAsync(new CreateOrganizationInvitationCommand(
-            organization.Id, null, null, "owner", "user:owner"), CancellationToken.None);
-        Assert.True(issued.IsSuccess);
+        OrganizationInvitationIssuedDto issued = await IssueAsync(
+            services, organization, null, null);
         OrganizationInvitation stored = Assert.Single(repository.Invitations);
-        Assert.NotEqual(issued.Value.Token, stored.TokenDigest);
-        Assert.Equal(43, issued.Value.Token.Length);
+        Assert.NotEqual(issued.Token, stored.TokenDigest);
+        Assert.Equal(43, issued.Token.Length);
         Assert.Equal(64, stored.TokenDigest.Length);
 
         var first = await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
-            issued.Value.Token, "member", "user:member"), CancellationToken.None);
+            issued.Token, "member", "user:member"), CancellationToken.None);
         var retry = await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
-            issued.Value.Token, "member", "user:member"), CancellationToken.None);
+            issued.Token, "member", "user:member"), CancellationToken.None);
 
         Assert.True(first.IsSuccess);
         Assert.True(retry.IsSuccess);
@@ -216,16 +207,14 @@ public sealed class OrganizationInvitationFlowTests
         TestRepository repository = CreateRepository();
         TestClock clock = new();
         using ServiceProvider services = CreateServices(repository, clock);
-        var create = services.GetRequiredService<
-            ICommandHandler<CreateOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
         var accept = services.GetRequiredService<
             ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>>();
         Organization organization = Assert.Single(repository.Organizations);
-        var issued = await create.HandleAsync(new CreateOrganizationInvitationCommand(
-            organization.Id, "member@example.com", 24, "owner", "user:owner"), CancellationToken.None);
+        OrganizationInvitationIssuedDto issued = await IssueAsync(
+            services, organization, "member@example.com", 24);
 
         var result = await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
-            issued.Value.Token, "member", "user:member"), CancellationToken.None);
+            issued.Token, "member", "user:member"), CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(OrganizationApplicationErrors.RecipientVerificationRequired, result.Error);
@@ -238,18 +227,16 @@ public sealed class OrganizationInvitationFlowTests
         TestRepository repository = CreateRepository();
         TestClock clock = new();
         using ServiceProvider services = CreateServices(repository, clock);
-        var create = services.GetRequiredService<
-            ICommandHandler<CreateOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
         var accept = services.GetRequiredService<
             ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>>();
         Organization organization = Assert.Single(repository.Organizations);
-        var issued = await create.HandleAsync(new CreateOrganizationInvitationCommand(
-            organization.Id, null, 24, "owner", "user:owner"), CancellationToken.None);
+        OrganizationInvitationIssuedDto issued = await IssueAsync(
+            services, organization, null, 24);
         Assert.True((await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
-            issued.Value.Token, "first", "user:first"), CancellationToken.None)).IsSuccess);
+            issued.Token, "first", "user:first"), CancellationToken.None)).IsSuccess);
 
         var competing = await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
-            issued.Value.Token, "second", "user:second"), CancellationToken.None);
+            issued.Token, "second", "user:second"), CancellationToken.None);
 
         Assert.True(competing.IsFailure);
         Assert.Equal(OrganizationDomainErrors.InvitationClaimedByAnotherSubject, competing.Error);
@@ -262,17 +249,15 @@ public sealed class OrganizationInvitationFlowTests
         TestRepository repository = CreateRepository();
         TestClock clock = new();
         using ServiceProvider services = CreateServices(repository, clock);
-        var create = services.GetRequiredService<
-            ICommandHandler<CreateOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
         var accept = services.GetRequiredService<
             ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>>();
         Organization organization = Assert.Single(repository.Organizations);
-        var issued = await create.HandleAsync(new CreateOrganizationInvitationCommand(
-            organization.Id, null, 1, "owner", "user:owner"), CancellationToken.None);
+        OrganizationInvitationIssuedDto issued = await IssueAsync(
+            services, organization, null, 1);
         clock.UtcNow = Now.AddHours(2);
 
         var result = await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
-            issued.Value.Token, "member", "user:member"), CancellationToken.None);
+            issued.Token, "member", "user:member"), CancellationToken.None);
 
         Assert.True(result.IsFailure);
         Assert.Equal(OrganizationDomainErrors.InvitationExpired, result.Error);
@@ -286,17 +271,15 @@ public sealed class OrganizationInvitationFlowTests
         TestClock clock = new();
         RecordingJoinPolicy policy = new();
         using ServiceProvider services = CreateServices(repository, clock, policy);
-        var create = services.GetRequiredService<
-            ICommandHandler<CreateOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
         var accept = services.GetRequiredService<
             ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>>();
         Organization organization = Assert.Single(repository.Organizations);
-        var issued = await create.HandleAsync(new CreateOrganizationInvitationCommand(
-            organization.Id, null, 24, "owner", "user:owner"), CancellationToken.None);
+        OrganizationInvitationIssuedDto issued = await IssueAsync(
+            services, organization, null, 24);
         policy.IsAllowed = false;
 
         var denied = await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
-            issued.Value.Token, "member", "user:member"), CancellationToken.None);
+            issued.Token, "member", "user:member"), CancellationToken.None);
         Assert.True(denied.IsFailure);
         Assert.Equal(OrganizationApplicationErrors.JoinAdmissionRejected, denied.Error);
         Assert.DoesNotContain(repository.Memberships, membership => membership.SubjectId == "member");
@@ -304,16 +287,16 @@ public sealed class OrganizationInvitationFlowTests
 
         policy.IsAllowed = true;
         Assert.True((await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
-            issued.Value.Token, "member", "user:member"), CancellationToken.None)).IsSuccess);
+            issued.Token, "member", "user:member"), CancellationToken.None)).IsSuccess);
         policy.IsAllowed = false;
         var retry = await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
-            issued.Value.Token, "member", "user:member"), CancellationToken.None);
+            issued.Token, "member", "user:member"), CancellationToken.None);
 
         Assert.True(retry.IsSuccess);
         Assert.Equal(2, policy.Contexts.Count);
         OrganizationJoinAdmissionContext context = policy.Contexts[^1];
         Assert.Equal(OrganizationJoinAdmissionOperation.AcceptInvitation, context.Operation);
-        Assert.Equal(issued.Value.Invitation.InvitationId, context.SourceId);
+        Assert.Equal(issued.Invitation.InvitationId, context.SourceId);
         Assert.Equal("member", context.ApplicantSubjectId);
     }
 
@@ -323,17 +306,13 @@ public sealed class OrganizationInvitationFlowTests
         TestRepository repository = CreateRepository();
         TestClock clock = new();
         using ServiceProvider services = CreateServices(repository, clock);
-        var create = services.GetRequiredService<
-            ICommandHandler<CreateOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
         var reissue = services.GetRequiredService<
             ICommandHandler<ReissueOrganizationInvitationCommand, OrganizationInvitationIssuedDto>>();
         var revoke = services.GetRequiredService<
             ICommandHandler<RevokeOrganizationInvitationCommand, OrganizationInvitationDto>>();
         Organization organization = Assert.Single(repository.Organizations);
-        OrganizationInvitationIssuedDto issued = (await create.HandleAsync(
-            new CreateOrganizationInvitationCommand(
-                organization.Id, null, 24, "owner", "user:owner"),
-            CancellationToken.None)).Value;
+        OrganizationInvitationIssuedDto issued = await IssueAsync(
+            services, organization, null, 24);
         clock.UtcNow = Now.AddMinutes(1);
         Assert.True(organization.Suspend(
             organization.Version, "user:owner", Guid.NewGuid(), clock.UtcNow).IsSuccess);
@@ -354,6 +333,33 @@ public sealed class OrganizationInvitationFlowTests
         Assert.True(revoked.IsSuccess);
         Assert.Single(repository.Invitations);
         Assert.Equal(OrganizationInvitationStatus.Revoked, revoked.Value.Status);
+    }
+
+    private static async Task<OrganizationInvitationIssuedDto> IssueAsync(
+        ServiceProvider services,
+        Organization organization,
+        string? recipientEmail,
+        int? lifetimeHours)
+    {
+        var handler = services.GetRequiredService<ICommandHandler<
+            IssueOrganizationInvitationCommand,
+            OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> result =
+            await handler.HandleAsync(
+                new IssueOrganizationInvitationCommand(
+                    new OrganizationInvitationIssuanceRequest(
+                        Guid.NewGuid(),
+                        organization.Id,
+                        recipientEmail,
+                        lifetimeHours,
+                        "owner",
+                        "user:owner")),
+                CancellationToken.None);
+        Assert.True(result.IsSuccess, result.Error.Code);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.Issued, result.Value.Outcome);
+        return new OrganizationInvitationIssuedDto(
+            result.Value.Source!,
+            Assert.IsType<string>(result.Value.Token));
     }
 
     private static TestRepository CreateRepository()
@@ -392,6 +398,8 @@ public sealed class OrganizationInvitationFlowTests
             services.AddSingleton(joinSourceAuthorizationPolicy);
         }
         services.AddSingleton<IOrganizationRepository>(repository);
+        services.AddSingleton<IOrganizationJoinSourceIssuanceCoordinator>(
+            new Gma.Modules.Organizations.Tests.Support.TestOrganizationJoinSourceIssuanceCoordinator(repository));
         services.AddSingleton<ISystemClock>(clock);
         services.AddSingleton<IIdGenerator>(new TestIds());
         return services.BuildServiceProvider();

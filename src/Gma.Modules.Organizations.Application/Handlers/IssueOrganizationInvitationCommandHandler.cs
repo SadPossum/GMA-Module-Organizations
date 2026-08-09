@@ -16,6 +16,7 @@ using Microsoft.Extensions.Options;
 
 internal sealed class IssueOrganizationInvitationCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationJoinSourceIssuanceCoordinator issuance,
     OrganizationJoinSourceAuthorization joinSourceAuthorization,
     OrganizationMutationAdmissionPolicy mutationAdmission,
     IOrganizationInvitationTokenService tokens,
@@ -74,7 +75,7 @@ internal sealed class IssueOrganizationInvitationCommandHandler(
         }
 
         DateTimeOffset nowUtc = clock.UtcNow;
-        OrganizationInvitation? existing = await organizations.GetInvitationAsync(
+        OrganizationInvitation? existing = await issuance.AcquireInvitationAsync(
             request.OrganizationId,
             request.SourceId,
             cancellationToken).ConfigureAwait(false);
@@ -95,7 +96,9 @@ internal sealed class IssueOrganizationInvitationCommandHandler(
         }
 
         if (await organizations.InvitationIdExistsAsync(request.SourceId, cancellationToken)
-            .ConfigureAwait(false))
+                .ConfigureAwait(false) ||
+            await organizations.EnrollmentLinkIdExistsAsync(request.SourceId, cancellationToken)
+                .ConfigureAwait(false))
         {
             return Failure(OrganizationApplicationErrors.JoinSourceIssuanceConflict);
         }

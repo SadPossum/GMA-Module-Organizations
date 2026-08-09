@@ -36,6 +36,8 @@ The Contracts facade for product-owned source management is tracked in
 The idempotent Contracts facade for issuing new invitation and enrollment
 sources is tracked in
 [Organizations Join Source Issuance Task](organizations-join-source-issuance-task.md).
+Concurrent issuance and caller-owned HTTP retry semantics are tracked in
+[Organizations Join Source Retry Safety Task](organizations-join-source-retry-safety-task.md).
 Replacement-source lifecycle consistency is tracked in
 [Organizations Lifecycle Consistency Task](organizations-lifecycle-consistency-task.md).
 
@@ -66,6 +68,11 @@ The module does not own user accounts, tenant-header resolution, product roles, 
 ## HTTP surfaces
 
 Authenticated organization operations live under `/api/organizations`. Invitation preview/acceptance lives under `/api/organization-invitations`; shared-link preview/claim lives under `/api/organization-enrollment`. Preview operations are `POST` requests with token bodies so bearer-like secrets are not copied into backend query logs.
+
+Invitation and enrollment-link creation requires a caller-owned `sourceId`.
+Exact retries return the existing source with an `already-issued` outcome and no
+token; plaintext tokens are returned only by the transaction that creates the
+source.
 
 The administration surface lives under `/api/admin/organizations` and uses global `organizations.read` and `organizations.manage` permissions. Destructive lifecycle and owner-recovery operations require explicit confirmation.
 

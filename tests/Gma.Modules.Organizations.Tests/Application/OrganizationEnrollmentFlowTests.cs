@@ -7,6 +7,7 @@ using Gma.Framework.Runtime.Time;
 using Gma.Modules.Organizations.Application;
 using Gma.Modules.Organizations.Application.Commands;
 using Gma.Modules.Organizations.Application.Ports;
+using Gma.Modules.Organizations.Api;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Errors;
@@ -103,6 +104,116 @@ public sealed partial class OrganizationEnrollmentFlowTests
 
         Assert.True(result.IsFailure);
         Assert.Equal(OrganizationApplicationErrors.JoinSourceIssuanceConflict, result.Error);
+        Assert.Single(repository.EnrollmentLinks);
+    }
+
+    [Fact]
+    public async Task Source_identity_cannot_be_reused_across_join_source_kinds()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        using ServiceProvider services = CreateServices(repository, new TestClock(Now));
+        Organization organization = Assert.Single(repository.Organizations);
+        var issueInvitation = services.GetRequiredService<ICommandHandler<
+            IssueOrganizationInvitationCommand,
+            OrganizationJoinSourceIssuance<OrganizationInvitationDto>>>();
+        var issueEnrollment = services.GetRequiredService<ICommandHandler<
+            IssueOrganizationEnrollmentLinkCommand,
+            OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>>();
+
+        Guid invitationId = Guid.NewGuid();
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> invitation =
+            await issueInvitation.HandleAsync(
+                new IssueOrganizationInvitationCommand(
+                    new OrganizationInvitationIssuanceRequest(
+                        invitationId,
+                        organization.Id,
+                        null,
+                        24,
+                        "owner",
+                        "user:owner")),
+                CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> enrollmentConflict =
+            await issueEnrollment.HandleAsync(
+                new IssueOrganizationEnrollmentLinkCommand(
+                    new OrganizationEnrollmentLinkIssuanceRequest(
+                        invitationId,
+                        organization.Id,
+                        24,
+                        10,
+                        OrganizationEnrollmentApprovalMode.RequiresApproval,
+                        "owner",
+                        "user:owner")),
+                CancellationToken.None);
+
+        Guid enrollmentId = Guid.NewGuid();
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> enrollment =
+            await issueEnrollment.HandleAsync(
+                new IssueOrganizationEnrollmentLinkCommand(
+                    new OrganizationEnrollmentLinkIssuanceRequest(
+                        enrollmentId,
+                        organization.Id,
+                        24,
+                        10,
+                        OrganizationEnrollmentApprovalMode.RequiresApproval,
+                        "owner",
+                        "user:owner")),
+                CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> invitationConflict =
+            await issueInvitation.HandleAsync(
+                new IssueOrganizationInvitationCommand(
+                    new OrganizationInvitationIssuanceRequest(
+                        enrollmentId,
+                        organization.Id,
+                        null,
+                        24,
+                        "owner",
+                        "user:owner")),
+                CancellationToken.None);
+
+        Assert.True(invitation.IsSuccess, invitation.Error.Code);
+        Assert.True(enrollment.IsSuccess, enrollment.Error.Code);
+        Assert.Equal(OrganizationApplicationErrors.JoinSourceIssuanceConflict, enrollmentConflict.Error);
+        Assert.Equal(OrganizationApplicationErrors.JoinSourceIssuanceConflict, invitationConflict.Error);
+        Assert.Single(repository.Invitations);
+        Assert.Single(repository.EnrollmentLinks);
+    }
+
+    [Fact]
+    public async Task Http_enrollment_adapter_returns_metadata_without_replaying_the_secret()
+    {
+        TestOrganizationRepository repository = CreateRepository();
+        using ServiceProvider services = CreateServices(repository, new TestClock(Now));
+        Organization organization = Assert.Single(repository.Organizations);
+        var issue = services.GetRequiredService<ICommandHandler<
+            IssueOrganizationEnrollmentLinkCommand,
+            OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>>();
+        Guid sourceId = Guid.NewGuid();
+        IssueOrganizationEnrollmentLinkCommand command = new(
+            new OrganizationEnrollmentLinkIssuanceRequest(
+                sourceId,
+                organization.Id,
+                24,
+                10,
+                OrganizationEnrollmentApprovalMode.RequiresApproval,
+                "owner",
+                "user:owner"));
+
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> firstResult =
+            await issue.HandleAsync(command, CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> replayResult =
+            await issue.HandleAsync(command, CancellationToken.None);
+        Result<OrganizationEnrollmentLinkIssuanceDto> first =
+            OrganizationEndpointSupport.MapEnrollmentLinkIssuance(firstResult);
+        Result<OrganizationEnrollmentLinkIssuanceDto> replay =
+            OrganizationEndpointSupport.MapEnrollmentLinkIssuance(replayResult);
+
+        Assert.True(first.IsSuccess, first.Error.Code);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.Issued, first.Value.Outcome);
+        Assert.NotNull(first.Value.Token);
+        Assert.True(replay.IsSuccess, replay.Error.Code);
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.AlreadyIssued, replay.Value.Outcome);
+        Assert.Null(replay.Value.Token);
+        Assert.Equal(sourceId, replay.Value.EnrollmentLink.EnrollmentLinkId);
         Assert.Single(repository.EnrollmentLinks);
     }
 
@@ -392,12 +503,27 @@ public sealed partial class OrganizationEnrollmentFlowTests
         int maximumClaims)
     {
         var handler = services.GetRequiredService<
-            ICommandHandler<CreateOrganizationEnrollmentLinkCommand, OrganizationEnrollmentLinkIssuedDto>>();
+            ICommandHandler<
+                IssueOrganizationEnrollmentLinkCommand,
+                OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>>>();
         Organization organization = Assert.Single(repository.Organizations);
-        var result = await handler.HandleAsync(new CreateOrganizationEnrollmentLinkCommand(
-            organization.Id, 24, maximumClaims, mode, "owner", "user:owner"), CancellationToken.None);
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> result =
+            await handler.HandleAsync(
+                new IssueOrganizationEnrollmentLinkCommand(
+                    new OrganizationEnrollmentLinkIssuanceRequest(
+                        Guid.NewGuid(),
+                        organization.Id,
+                        24,
+                        maximumClaims,
+                        mode,
+                        "owner",
+                        "user:owner")),
+                CancellationToken.None);
         Assert.True(result.IsSuccess);
-        return result.Value;
+        Assert.Equal(OrganizationJoinSourceIssuanceOutcome.Issued, result.Value.Outcome);
+        return new OrganizationEnrollmentLinkIssuedDto(
+            result.Value.Source!,
+            Assert.IsType<string>(result.Value.Token));
     }
 
     private static TestOrganizationRepository CreateRepository()
@@ -439,6 +565,8 @@ public sealed partial class OrganizationEnrollmentFlowTests
             services.AddSingleton(joinSourceAuthorizationPolicy);
         }
         services.AddSingleton<IOrganizationRepository>(repository);
+        services.AddSingleton<IOrganizationJoinSourceIssuanceCoordinator>(
+            new TestOrganizationJoinSourceIssuanceCoordinator(repository));
         services.AddSingleton<ISystemClock>(clock);
         services.AddSingleton<IIdGenerator>(new TestIds());
         return services.BuildServiceProvider();

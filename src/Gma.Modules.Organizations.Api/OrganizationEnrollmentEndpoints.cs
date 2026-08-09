@@ -5,6 +5,7 @@ using Gma.Framework.Api.Observability;
 using Gma.Framework.Api.Results;
 using Gma.Framework.Cqrs;
 using Gma.Framework.Pagination;
+using Gma.Framework.Results;
 using Gma.Framework.Security;
 using Gma.Modules.Organizations.Api.Requests;
 using Gma.Modules.Organizations.Application.Commands;
@@ -45,11 +46,21 @@ internal static class OrganizationEnrollmentEndpoints
                 return Results.Unauthorized();
             }
 
-            return (await dispatcher.SendAsync(new CreateOrganizationEnrollmentLinkCommand(
-                organizationId, request.LifetimeHours, request.MaximumClaims, request.ApprovalMode,
-                subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
+            Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> result =
+                await dispatcher.SendAsync(
+                    new IssueOrganizationEnrollmentLinkCommand(
+                        new OrganizationEnrollmentLinkIssuanceRequest(
+                            request.SourceId,
+                            organizationId,
+                            request.LifetimeHours,
+                            request.MaximumClaims,
+                            request.ApprovalMode,
+                            subjectId,
+                            OrganizationEndpointSupport.Actor(subjectId))),
+                    token).ConfigureAwait(false);
+            return OrganizationEndpointSupport.MapEnrollmentLinkIssuance(result)
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        }).Produces<OrganizationEnrollmentLinkIssuedDto>(StatusCodes.Status200OK);
+        }).Produces<OrganizationEnrollmentLinkIssuanceDto>(StatusCodes.Status200OK);
         OrganizationEndpointSupport.RequireAssuranceWhenConfigured(createLink, governanceAssurance);
 
         MapLinkAction(organizations, "disable", OrganizationEnrollmentLinkAction.Disable, governanceAssurance);

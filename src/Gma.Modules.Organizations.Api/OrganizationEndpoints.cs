@@ -5,6 +5,7 @@ using Gma.Framework.Api.Observability;
 using Gma.Framework.Api.Results;
 using Gma.Framework.Cqrs;
 using Gma.Framework.Pagination;
+using Gma.Framework.Results;
 using Gma.Framework.Security;
 using Gma.Modules.Organizations.Api.Requests;
 using Gma.Modules.Organizations.Application.Commands;
@@ -225,11 +226,20 @@ internal static class OrganizationEndpoints
                 return Results.Unauthorized();
             }
 
-            return (await dispatcher.SendAsync(new CreateOrganizationInvitationCommand(
-                organizationId, request.RecipientEmail, request.LifetimeHours,
-                subjectId, OrganizationEndpointSupport.Actor(subjectId)), token).ConfigureAwait(false))
+            Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> result =
+                await dispatcher.SendAsync(
+                    new IssueOrganizationInvitationCommand(
+                        new OrganizationInvitationIssuanceRequest(
+                            request.SourceId,
+                            organizationId,
+                            request.RecipientEmail,
+                            request.LifetimeHours,
+                            subjectId,
+                            OrganizationEndpointSupport.Actor(subjectId))),
+                    token).ConfigureAwait(false);
+            return OrganizationEndpointSupport.MapInvitationIssuance(result)
                 .ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
-        }).Produces<OrganizationInvitationIssuedDto>(StatusCodes.Status200OK);
+        }).Produces<OrganizationInvitationIssuanceDto>(StatusCodes.Status200OK);
         OrganizationEndpointSupport.RequireAssuranceWhenConfigured(createInvitation, governanceAssurance);
 
         RouteHandlerBuilder revokeInvitation = group.MapPost("/{organizationId:guid}/invitations/{invitationId:guid}/revoke", async (

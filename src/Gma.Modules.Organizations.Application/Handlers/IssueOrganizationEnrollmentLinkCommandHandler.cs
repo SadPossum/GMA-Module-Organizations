@@ -17,6 +17,7 @@ using DomainApprovalMode = Gma.Modules.Organizations.Domain.Enums.OrganizationEn
 
 internal sealed class IssueOrganizationEnrollmentLinkCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationJoinSourceIssuanceCoordinator issuance,
     OrganizationJoinSourceAuthorization joinSourceAuthorization,
     OrganizationMutationAdmissionPolicy mutationAdmission,
     IOrganizationEnrollmentTokenService tokens,
@@ -76,7 +77,7 @@ internal sealed class IssueOrganizationEnrollmentLinkCommandHandler(
         }
 
         DateTimeOffset nowUtc = clock.UtcNow;
-        OrganizationEnrollmentLink? existing = await organizations.GetEnrollmentLinkAsync(
+        OrganizationEnrollmentLink? existing = await issuance.AcquireEnrollmentLinkAsync(
             request.OrganizationId,
             request.SourceId,
             cancellationToken).ConfigureAwait(false);
@@ -98,7 +99,9 @@ internal sealed class IssueOrganizationEnrollmentLinkCommandHandler(
         }
 
         if (await organizations.EnrollmentLinkIdExistsAsync(request.SourceId, cancellationToken)
-            .ConfigureAwait(false))
+                .ConfigureAwait(false) ||
+            await organizations.InvitationIdExistsAsync(request.SourceId, cancellationToken)
+                .ConfigureAwait(false))
         {
             return Failure(OrganizationApplicationErrors.JoinSourceIssuanceConflict);
         }

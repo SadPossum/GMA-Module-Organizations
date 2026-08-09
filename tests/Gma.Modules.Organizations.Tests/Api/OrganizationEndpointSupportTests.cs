@@ -69,6 +69,22 @@ public sealed class OrganizationEndpointSupportTests
     }
 
     [Theory]
+    [InlineData("Organizations.JoinSourceIdRequired", StatusCodes.Status400BadRequest)]
+    [InlineData("Organizations.JoinSourceIssuanceConflict", StatusCodes.Status409Conflict)]
+    public void Join_source_issuance_failures_have_stable_http_statuses(
+        string errorCode,
+        int expectedStatusCode)
+    {
+        Error error = errorCode == OrganizationApplicationErrors.JoinSourceIdRequired.Code
+            ? OrganizationApplicationErrors.JoinSourceIdRequired
+            : OrganizationApplicationErrors.JoinSourceIssuanceConflict;
+
+        Assert.Equal(
+            expectedStatusCode,
+            OrganizationEndpointSupport.ErrorStatusCodes.GetStatusCode(error));
+    }
+
+    [Theory]
     [InlineData("Organizations.MutationRejected", StatusCodes.Status409Conflict)]
     [InlineData("Organizations.MutationAdmissionUnavailable", StatusCodes.Status503ServiceUnavailable)]
     public void Mutation_admission_failures_have_stable_http_statuses(

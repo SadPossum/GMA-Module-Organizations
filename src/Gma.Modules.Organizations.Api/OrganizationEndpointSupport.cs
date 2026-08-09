@@ -2,9 +2,11 @@ namespace Gma.Modules.Organizations.Api;
 
 using System.Security.Claims;
 using Gma.Framework.Api.Results;
+using Gma.Framework.Results;
 using Gma.Framework.Security;
 using Gma.Framework.Security.AspNetCore;
 using Gma.Modules.Organizations.Application;
+using Gma.Modules.Organizations.Contracts;
 using Microsoft.AspNetCore.Builder;
 using Microsoft.AspNetCore.Http;
 
@@ -36,6 +38,8 @@ internal static class OrganizationEndpointSupport
         new(OrganizationApplicationErrors.JoinAdmissionRejected.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.MutationRejected.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.MutationAdmissionUnavailable.Code, StatusCodes.Status503ServiceUnavailable),
+        new(OrganizationApplicationErrors.JoinSourceIdRequired.Code, StatusCodes.Status400BadRequest),
+        new(OrganizationApplicationErrors.JoinSourceIssuanceConflict.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.JoinSourceManagementRequired.Code, StatusCodes.Status403Forbidden),
         new(OrganizationApplicationErrors.JoinSourceAuthorizationUnavailable.Code, StatusCodes.Status503ServiceUnavailable),
         new(OrganizationApplicationErrors.VersionConflict.Code, StatusCodes.Status409Conflict),
@@ -58,6 +62,46 @@ internal static class OrganizationEndpointSupport
     }
 
     public static string Actor(string subjectId) => $"user:{subjectId}";
+
+    public static Result<OrganizationInvitationIssuanceDto> MapInvitationIssuance(
+        Result<OrganizationJoinSourceIssuance<OrganizationInvitationDto>> result)
+    {
+        if (result.IsFailure)
+        {
+            return Result.Failure<OrganizationInvitationIssuanceDto>(result.Error);
+        }
+
+        OrganizationJoinSourceIssuance<OrganizationInvitationDto> issuance = result.Value;
+        if (!issuance.IsSuccess)
+        {
+            throw new InvalidOperationException("A successful invitation issuance result is invalid.");
+        }
+
+        return Result.Success(new OrganizationInvitationIssuanceDto(
+            issuance.Source!,
+            issuance.Token,
+            issuance.Outcome));
+    }
+
+    public static Result<OrganizationEnrollmentLinkIssuanceDto> MapEnrollmentLinkIssuance(
+        Result<OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto>> result)
+    {
+        if (result.IsFailure)
+        {
+            return Result.Failure<OrganizationEnrollmentLinkIssuanceDto>(result.Error);
+        }
+
+        OrganizationJoinSourceIssuance<OrganizationEnrollmentLinkDto> issuance = result.Value;
+        if (!issuance.IsSuccess)
+        {
+            throw new InvalidOperationException("A successful enrollment-link issuance result is invalid.");
+        }
+
+        return Result.Success(new OrganizationEnrollmentLinkIssuanceDto(
+            issuance.Source!,
+            issuance.Token,
+            issuance.Outcome));
+    }
 
     public static RouteHandlerBuilder RequireAssuranceWhenConfigured(
         RouteHandlerBuilder endpoint,
