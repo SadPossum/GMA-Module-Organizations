@@ -22,6 +22,8 @@ mutations. Policies compose fail-closed, remain optional for existing hosts,
 and do not intercept defensive source denial or administration recovery.
 
 Implementation direction and acceptance criteria are tracked in [Organizations Task](organizations-task.md).
+Retry-safe self-service creation is tracked in
+[Organizations Creation Idempotency Task](organizations-creation-idempotency-task.md).
 The remaining production hardening work is tracked in
 [Organizations Production Hardening Task](organizations-production-hardening-task.md).
 The reusable host policy seam for owner-facing membership changes is tracked in
@@ -102,6 +104,11 @@ Recipient-bound invitations fail closed unless a host or extension replaces `IOr
 ## Operations
 
 Token plaintext is returned once at issuance; only purpose-separated SHA-256 digests are persisted. All mutable aggregates carry optimistic versions, persistence uses a durable outbox, and PostgreSQL container tests prove bounded-claim concurrency and organization/subject isolation.
+
+Self-service organization creation requires a caller-owned non-empty operation
+id. Keep that id for retries of the same normalized name and slug; exact
+replays return the current organization and active initial membership, while
+changed reuse fails with `Organizations.CreationOperationConflict`.
 
 Natural lifecycle processing and domain retention are disabled by default. Enable
 both deliberately on one host responsible for Organizations maintenance.

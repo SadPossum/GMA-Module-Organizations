@@ -19,6 +19,9 @@ internal sealed class OrganizationConfiguration : IEntityTypeConfiguration<Organ
         builder.Property(organization => organization.Slug)
             .HasMaxLength(OrganizationSlug.MaxLength)
             .IsRequired();
+        builder.Property(organization => organization.CreationRequestFingerprint)
+            .HasMaxLength(64)
+            .IsFixedLength();
         builder.HasIndex(organization => organization.Slug).IsUnique();
         builder.Property(organization => organization.Status).HasConversion<int>();
         builder.Property(organization => organization.Version).IsConcurrencyToken();

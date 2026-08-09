@@ -52,6 +52,23 @@ public sealed class OrganizationEndpointSupportTests
     }
 
     [Theory]
+    [InlineData("Organizations.CreationOperationRequired", StatusCodes.Status400BadRequest)]
+    [InlineData("Organizations.CreationOperationConflict", StatusCodes.Status409Conflict)]
+    public void Creation_operation_failures_have_stable_http_statuses(
+        string errorCode,
+        int expectedStatusCode)
+    {
+        Error error = errorCode ==
+            OrganizationApplicationErrors.CreationOperationRequired.Code
+                ? OrganizationApplicationErrors.CreationOperationRequired
+                : OrganizationApplicationErrors.CreationOperationConflict;
+
+        Assert.Equal(
+            expectedStatusCode,
+            OrganizationEndpointSupport.ErrorStatusCodes.GetStatusCode(error));
+    }
+
+    [Theory]
     [InlineData("Organizations.MutationRejected", StatusCodes.Status409Conflict)]
     [InlineData("Organizations.MutationAdmissionUnavailable", StatusCodes.Status503ServiceUnavailable)]
     public void Mutation_admission_failures_have_stable_http_statuses(

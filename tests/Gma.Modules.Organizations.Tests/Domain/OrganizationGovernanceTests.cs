@@ -27,6 +27,33 @@ public sealed class OrganizationGovernanceTests
     }
 
     [Fact]
+    public void Create_accepts_only_a_lowercase_sha256_creation_fingerprint()
+    {
+        var valid = Organization.Create(
+            Guid.NewGuid(),
+            "Harbor House",
+            "harbor-house",
+            "user:owner",
+            Guid.NewGuid(),
+            Now,
+            new string('a', 64));
+        var invalid = Organization.Create(
+            Guid.NewGuid(),
+            "Harbor House",
+            "harbor-house",
+            "user:owner",
+            Guid.NewGuid(),
+            Now,
+            new string('A', 64));
+
+        Assert.True(valid.IsSuccess, valid.Error.Code);
+        Assert.Equal(new string('a', 64), valid.Value.CreationRequestFingerprint);
+        Assert.Equal(
+            OrganizationDomainErrors.CreationRequestFingerprintInvalid,
+            invalid.Error);
+    }
+
+    [Fact]
     public void Last_active_owner_cannot_be_removed()
     {
         Organization organization = CreateOrganization();

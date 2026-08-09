@@ -165,6 +165,11 @@ namespace Gma.Modules.Organizations.Persistence.SqlServerMigrations.Migrations
                         .HasMaxLength(192)
                         .HasColumnType("nvarchar(192)");
 
+                    b.Property<string>("CreationRequestFingerprint")
+                        .HasMaxLength(64)
+                        .HasColumnType("nchar(64)")
+                        .IsFixedLength();
+
                     b.Property<DateTimeOffset>("LastChangedAtUtc")
                         .HasColumnType("datetimeoffset");
 

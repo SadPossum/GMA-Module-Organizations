@@ -33,7 +33,7 @@ public sealed class OrganizationsPersistenceRetryBehaviorTests
         OrganizationsPersistenceRetryBehavior<CreateOrganizationCommand, OrganizationMembershipSummaryDto> behavior =
             new(dbContext, _ => true);
         CreateOrganizationCommand command = new(
-            "Harbor House", "harbor-house", "member-a", "user:member-a");
+            Guid.NewGuid(), "Harbor House", "harbor-house", "member-a", "user:member-a");
         int attempts = 0;
 
         async Task<Result<OrganizationMembershipSummaryDto>> Next()
@@ -71,7 +71,7 @@ public sealed class OrganizationsPersistenceRetryBehaviorTests
         OrganizationsPersistenceRetryBehavior<CreateOrganizationCommand, OrganizationMembershipSummaryDto> behavior =
             new(dbContext, _ => false);
         CreateOrganizationCommand command = new(
-            "Harbor House", "harbor-house", "member-a", "user:member-a");
+            Guid.NewGuid(), "Harbor House", "harbor-house", "member-a", "user:member-a");
         int attempts = 0;
 
         Task<Result<OrganizationMembershipSummaryDto>> Next()

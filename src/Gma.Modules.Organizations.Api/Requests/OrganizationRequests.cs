@@ -2,7 +2,10 @@ namespace Gma.Modules.Organizations.Api.Requests;
 
 using Gma.Modules.Organizations.Contracts;
 
-public sealed record CreateOrganizationRequest(string Name, string Slug);
+public sealed record CreateOrganizationRequest(
+    Guid OperationId,
+    string Name,
+    string Slug);
 
 public sealed record UpdateOrganizationRequest(string Name, string Slug, long ExpectedVersion);
 

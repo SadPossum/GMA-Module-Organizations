@@ -15,6 +15,7 @@ public sealed class Organization : AggregateRoot<Guid>
     public string ScopeId => this.Id.ToString("D");
     public string Name { get; private set; } = string.Empty;
     public string Slug { get; private set; } = string.Empty;
+    public string? CreationRequestFingerprint { get; private set; }
     public OrganizationState Status { get; private set; } = OrganizationState.Active;
     public int ActiveOwnerCount { get; private set; }
     public long Version { get; private set; } = 1;
@@ -29,7 +30,8 @@ public sealed class Organization : AggregateRoot<Guid>
         string slug,
         string actorId,
         Guid eventId,
-        DateTimeOffset nowUtc)
+        DateTimeOffset nowUtc,
+        string? creationRequestFingerprint = null)
     {
         if (id == Guid.Empty)
         {
@@ -54,6 +56,13 @@ public sealed class Organization : AggregateRoot<Guid>
             return Result.Failure<Organization>(actor.Error);
         }
 
+        if (creationRequestFingerprint is not null &&
+            !IsSha256(creationRequestFingerprint))
+        {
+            return Result.Failure<Organization>(
+                OrganizationDomainErrors.CreationRequestFingerprintInvalid);
+        }
+
         Result eventValidation = ValidateEvent(eventId);
         if (eventValidation.IsFailure)
         {
@@ -64,6 +73,7 @@ public sealed class Organization : AggregateRoot<Guid>
         {
             Name = organizationName.Value.Value,
             Slug = organizationSlug.Value.Value,
+            CreationRequestFingerprint = creationRequestFingerprint,
             Status = OrganizationState.Active,
             ActiveOwnerCount = 1,
             CreatedBy = actor.Value.Value,
@@ -74,6 +84,10 @@ public sealed class Organization : AggregateRoot<Guid>
         organization.RaiseChange(eventId, nowUtc, OrganizationChangeKind.Created);
         return Result.Success(organization);
     }
+
+    private static bool IsSha256(string value) =>
+        value.Length == 64 && value.All(character =>
+            character is >= '0' and <= '9' or >= 'a' and <= 'f');
 
     public Result UpdateProfile(
         string name,

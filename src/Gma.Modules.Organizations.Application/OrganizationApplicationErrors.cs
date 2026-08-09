@@ -10,6 +10,8 @@ public static class OrganizationApplicationErrors
     public static readonly Error MembershipRequired = new("Organizations.MembershipRequired", "An active organization membership is required.");
     public static readonly Error OwnerRequired = new("Organizations.OwnerRequired", "An active organization owner membership is required.");
     public static readonly Error SlugConflict = new("Organizations.SlugConflict", "The organization slug is already in use.");
+    public static readonly Error CreationOperationRequired = new("Organizations.CreationOperationRequired", "An organization creation operation id is required.");
+    public static readonly Error CreationOperationConflict = new("Organizations.CreationOperationConflict", "The organization creation operation id is already bound to different inputs or an unavailable result.");
     public static readonly Error MembershipConflict = new("Organizations.MembershipConflict", "The subject already has an organization membership.");
     public static readonly Error MembershipChangeRejected = new("Organizations.MembershipChangeRejected", "The membership change is not available through this operation.");
     public static readonly Error SelfServiceCreationDisabled = new("Organizations.SelfServiceCreationDisabled", "Self-service organization creation is disabled.");

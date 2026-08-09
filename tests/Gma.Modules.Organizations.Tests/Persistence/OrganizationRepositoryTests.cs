@@ -47,6 +47,21 @@ public sealed class OrganizationRepositoryTests
     }
 
     [Fact]
+    public void Organization_creation_fingerprint_is_optional_fixed_length_state()
+    {
+        using OrganizationsDbContext dbContext = CreateDbContext();
+
+        var entity = dbContext.Model.FindEntityType(typeof(Organization));
+        var property = entity!.FindProperty(
+            nameof(Organization.CreationRequestFingerprint));
+
+        Assert.NotNull(property);
+        Assert.True(property.IsNullable);
+        Assert.Equal(64, property.GetMaxLength());
+        Assert.True(property.IsFixedLength());
+    }
+
+    [Fact]
     public void Enrollment_claim_model_has_one_unique_link_subject_index()
     {
         using OrganizationsDbContext dbContext = CreateDbContext();

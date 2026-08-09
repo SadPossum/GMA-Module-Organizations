@@ -8,6 +8,7 @@ public static class OrganizationDomainErrors
     public static readonly Error MembershipIdRequired = new("Organizations.MembershipIdRequired", "A membership id is required.");
     public static readonly Error NameInvalid = new("Organizations.NameInvalid", "The organization name is invalid.");
     public static readonly Error SlugInvalid = new("Organizations.SlugInvalid", "The organization slug is invalid.");
+    public static readonly Error CreationRequestFingerprintInvalid = new("Organizations.CreationRequestFingerprintInvalid", "The organization creation request fingerprint is invalid.");
     public static readonly Error SubjectInvalid = new("Organizations.SubjectInvalid", "The subject id is invalid.");
     public static readonly Error ActorInvalid = new("Organizations.ActorInvalid", "The actor id is invalid.");
     public static readonly Error EventIdRequired = new("Organizations.EventIdRequired", "A domain event id is required.");

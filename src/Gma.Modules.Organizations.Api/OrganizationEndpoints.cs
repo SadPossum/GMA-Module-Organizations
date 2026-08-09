@@ -61,7 +61,11 @@ internal static class OrganizationEndpoints
             }
 
             return (await dispatcher.SendAsync(new CreateOrganizationCommand(
-                request.Name, request.Slug, subjectId, OrganizationEndpointSupport.Actor(subjectId)), token)
+                request.OperationId,
+                request.Name,
+                request.Slug,
+                subjectId,
+                OrganizationEndpointSupport.Actor(subjectId)), token)
                 .ConfigureAwait(false)).ToHttpResult(OrganizationEndpointSupport.ErrorStatusCodes);
         }).Produces<OrganizationMembershipSummaryDto>(StatusCodes.Status200OK);
         OrganizationEndpointSupport.RequireAssuranceWhenConfigured(createOrganization, governanceAssurance);

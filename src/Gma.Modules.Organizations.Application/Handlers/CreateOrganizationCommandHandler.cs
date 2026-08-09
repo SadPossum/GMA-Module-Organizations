@@ -15,6 +15,7 @@ using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.Organization
 
 internal sealed class CreateOrganizationCommandHandler(
     IOrganizationRepository organizations,
+    IOrganizationCreationCoordinator creation,
     IOrganizationAdmissionPolicy admissionPolicy,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<CreateOrganizationCommand, OrganizationMembershipSummaryDto>
@@ -23,45 +24,113 @@ internal sealed class CreateOrganizationCommandHandler(
         CreateOrganizationCommand command,
         CancellationToken cancellationToken)
     {
-        Result admission = await admissionPolicy
-            .CanCreateOrganizationAsync(command.SubjectId, cancellationToken)
-            .ConfigureAwait(false);
-        if (admission.IsFailure)
+        if (command.OperationId == Guid.Empty)
         {
-            return Result.Failure<OrganizationMembershipSummaryDto>(admission.Error);
+            return Failure(
+                OrganizationApplicationErrors.CreationOperationRequired);
         }
 
+        Result<OrganizationName> name = OrganizationName.Create(command.Name);
         Result<OrganizationSlug> slug = OrganizationSlug.Create(command.Slug);
-        if (slug.IsFailure)
+        Result<OrganizationSubjectId> subject =
+            OrganizationSubjectId.Create(command.SubjectId);
+        Result<OrganizationActorId> actor =
+            OrganizationActorId.Create(command.ActorId);
+        if (name.IsFailure || slug.IsFailure || subject.IsFailure ||
+            actor.IsFailure)
         {
-            return Result.Failure<OrganizationMembershipSummaryDto>(slug.Error);
+            return Failure(
+                name.IsFailure ? name.Error :
+                slug.IsFailure ? slug.Error :
+                subject.IsFailure ? subject.Error : actor.Error);
+        }
+
+        string fingerprint = OrganizationCreationFingerprint.Compute(
+            name.Value.Value,
+            slug.Value.Value,
+            subject.Value.Value,
+            actor.Value.Value);
+        Organization? existing = await creation.AcquireAsync(
+            command.OperationId,
+            cancellationToken).ConfigureAwait(false);
+        if (existing is not null)
+        {
+            OrganizationMembership? existingMembership = await organizations
+                .GetMembershipAsync(
+                    existing.Id,
+                    subject.Value.Value,
+                    cancellationToken).ConfigureAwait(false);
+            bool exactReplay = string.Equals(
+                    existing.CreationRequestFingerprint,
+                    fingerprint,
+                    StringComparison.Ordinal) &&
+                existingMembership?.Status ==
+                    OrganizationMembershipState.Active;
+            return exactReplay
+                ? Result.Success(new OrganizationMembershipSummaryDto(
+                    existing.ToDto(),
+                    existingMembership!.ToDto()))
+                : Failure(
+                    OrganizationApplicationErrors.CreationOperationConflict);
+        }
+
+        Result admission = await admissionPolicy
+            .CanCreateOrganizationAsync(
+                subject.Value.Value,
+                cancellationToken).ConfigureAwait(false);
+        if (admission.IsFailure)
+        {
+            return Failure(admission.Error);
         }
 
         if (await organizations.SlugExistsAsync(slug.Value.Value, null, cancellationToken).ConfigureAwait(false))
         {
-            return Result.Failure<OrganizationMembershipSummaryDto>(OrganizationApplicationErrors.SlugConflict);
+            return Failure(OrganizationApplicationErrors.SlugConflict);
         }
 
-        Guid organizationId = ids.NewId();
-        DateTimeOffset nowUtc = clock.UtcNow;
+        DateTimeOffset nowUtc = Canonicalize(clock.UtcNow);
         Result<Organization> organization = Organization.Create(
-            organizationId, command.Name, slug.Value.Value, command.ActorId, ids.NewId(), nowUtc);
+            command.OperationId,
+            name.Value.Value,
+            slug.Value.Value,
+            actor.Value.Value,
+            ids.NewId(),
+            nowUtc,
+            fingerprint);
         if (organization.IsFailure)
         {
-            return Result.Failure<OrganizationMembershipSummaryDto>(organization.Error);
+            return Failure(organization.Error);
         }
 
         Result<OrganizationMembership> membership = OrganizationMembership.Create(
-            ids.NewId(), organizationId, command.SubjectId, DomainMembershipRole.Owner,
-            command.ActorId, ids.NewId(), nowUtc);
+            ids.NewId(),
+            organization.Value.Id,
+            subject.Value.Value,
+            DomainMembershipRole.Owner,
+            actor.Value.Value,
+            ids.NewId(),
+            nowUtc);
         if (membership.IsFailure)
         {
-            return Result.Failure<OrganizationMembershipSummaryDto>(membership.Error);
+            return Failure(membership.Error);
         }
 
         await organizations.AddOrganizationAsync(organization.Value, cancellationToken).ConfigureAwait(false);
         await organizations.AddMembershipAsync(membership.Value, cancellationToken).ConfigureAwait(false);
         return Result.Success(new OrganizationMembershipSummaryDto(
             organization.Value.ToDto(), membership.Value.ToDto()));
+    }
+
+    private static Result<OrganizationMembershipSummaryDto> Failure(
+        Error error) =>
+        Result.Failure<OrganizationMembershipSummaryDto>(error);
+
+    private static DateTimeOffset Canonicalize(DateTimeOffset value)
+    {
+        DateTimeOffset utc = value.ToUniversalTime();
+        const long ticksPerMicrosecond = TimeSpan.TicksPerMillisecond / 1000;
+        return new(
+            utc.Ticks - (utc.Ticks % ticksPerMicrosecond),
+            TimeSpan.Zero);
     }
 }

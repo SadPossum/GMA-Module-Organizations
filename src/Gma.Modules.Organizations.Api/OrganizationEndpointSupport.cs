@@ -16,6 +16,8 @@ internal static class OrganizationEndpointSupport
         new(OrganizationApplicationErrors.MembershipRequired.Code, StatusCodes.Status403Forbidden),
         new(OrganizationApplicationErrors.OwnerRequired.Code, StatusCodes.Status403Forbidden),
         new(OrganizationApplicationErrors.SlugConflict.Code, StatusCodes.Status409Conflict),
+        new(OrganizationApplicationErrors.CreationOperationRequired.Code, StatusCodes.Status400BadRequest),
+        new(OrganizationApplicationErrors.CreationOperationConflict.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.MembershipConflict.Code, StatusCodes.Status409Conflict),
         new(OrganizationApplicationErrors.SelfServiceCreationDisabled.Code, StatusCodes.Status403Forbidden),
         new(OrganizationApplicationErrors.SubjectVerificationRequired.Code, StatusCodes.Status403Forbidden),
