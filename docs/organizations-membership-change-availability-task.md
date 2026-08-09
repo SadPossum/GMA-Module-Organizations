@@ -1,6 +1,6 @@
 # Organizations Membership-Change Availability Task
 
-Status: in progress
+Status: complete
 Date: 2026-08-09
 
 ## Goal
@@ -63,7 +63,7 @@ first owner-count or membership mutation.
   changing authorization, replay, concurrency, or aggregate behavior.
 - [x] Add stable API status coverage and adversarial no-mutation tests.
 - [x] Verify the unchanged BunkFy deny-only policy consumer.
-- [ ] Run one consolidated non-Docker gate per changed repository at the
+- [x] Run one consolidated non-Docker gate per changed repository at the
   completed slice boundary, publish exact pins, and verify CI.
 
 ## Verification Plan
@@ -88,7 +88,25 @@ first owner-count or membership mutation.
 - `pwsh eng/verify.ps1 -SkipRestore` passed in the BunkFy backend, including
   source and architecture guards, a zero-warning build, migration drift checks,
   all fast suites, and 54 integration tests.
-- Skeleton verification and exact-pin publication remain pending.
+- The Skeleton consumer gate passed source and package guards, generated
+  selection matrices, zero-warning builds, migration drift, every non-Docker
+  suite, 277 Organizations tests, 269 architecture tests, and 17 host
+  integration tests.
+- The BunkFy root lightweight gate passed exact submodule freshness, workspace
+  graph, operations scripts, deployed-flow fixtures, and production-admission
+  policy checks.
+- Exact-commit CI passed for every functional pin: Organizations validation and
+  security; Skeleton validation, security, and CodeQL; BunkFy backend validation
+  and security; and BunkFy root validation, security, and both CodeQL languages.
+- Documentation-only closure pins are intentionally CI-skipped because no
+  executable source differs from the fully verified functional commits.
+
+Functional publication pins:
+
+- Organizations: `4ddcec86ee09d142aab39b516fe27074a145baca`
+- GMA Skeleton: `2f41386757f90a19759e66c83fa3979212e20b41`
+- BunkFy backend: `9134c5bd984b1bc1f84bf3a18e307076b295f8f2`
+- BunkFy root: `39539d377481de39621afd8a6e5507cf31d88877`
 
 ## Not In This Slice
 
