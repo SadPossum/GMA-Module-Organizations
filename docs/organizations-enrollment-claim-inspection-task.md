@@ -1,6 +1,6 @@
 # Organizations Enrollment Claim Inspection Task
 
-Status: module implementation complete; composition publication pending
+Status: complete
 Date: 2026-07-28
 
 ## Goal
@@ -72,6 +72,20 @@ Completed on 2026-07-28:
 - the focused PostgreSQL inspector proof passes with exactly one reader command
   and no tracked entities.
 
-The remaining work is composition-owned: publish Organizations, advance the
-canonical Skeleton pointer, then consume the contract from BunkFy in a separate
-product-retention slice.
+## Composition Evidence
+
+Composition is complete as of 2026-08-09:
+
+- the canonical Skeleton pins the published Organizations module and retains
+  its normal persistence registration for the inspector;
+- BunkFy Workspaces consumes `IOrganizationEnrollmentClaimInspector` in
+  `ReconcileWorkspaceStaffOnboardingRetentionCandidateCommandHandler` instead
+  of reading Organizations persistence;
+- focused Workspaces retention tests cover pending, accepted, rejected,
+  expired, withdrawn, missing, inconsistent, and authority-lapsed claim
+  observations; and
+- the BunkFy non-Docker verification gate covers the composed application and
+  worker graph.
+
+The product keeps its staging lifetime, cleanup decisions, and recovery state;
+Organizations remains the sole authority for the retained claim projection.

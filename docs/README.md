@@ -42,6 +42,9 @@ Concurrent issuance and caller-owned HTTP retry semantics are tracked in
 [Organizations Join Source Retry Safety Task](organizations-join-source-retry-safety-task.md).
 Replacement-source lifecycle consistency is tracked in
 [Organizations Lifecycle Consistency Task](organizations-lifecycle-consistency-task.md).
+Exact replay for terminal invitation revocation and enrollment-link disable is
+tracked in
+[Organizations Terminal Join-Source Retry Safety Task](organizations-terminal-join-source-retry-safety-task.md).
 Transaction-stable lifecycle and membership authorization is tracked in
 [Organizations Governance Transaction Consistency Task](organizations-governance-transaction-consistency-task.md).
 Single-winner coordination across invitation and enrollment paths is tracked in

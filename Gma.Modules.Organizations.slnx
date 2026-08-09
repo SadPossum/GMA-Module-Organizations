@@ -48,6 +48,7 @@
     <File Path="docs/organizations-profile-lifecycle-retry-safety-task.md" />
     <File Path="docs/organizations-scope-lifecycle-task.md" />
     <File Path="docs/organizations-task.md" />
+    <File Path="docs/organizations-terminal-join-source-retry-safety-task.md" />
     <File Path="docs/organizations-truthful-pagination-task.md" />
   </Folder>
   <Folder Name="/eng/">

@@ -7,7 +7,7 @@ using Gma.Modules.Organizations.Domain.Errors;
 using Gma.Modules.Organizations.Domain.Events;
 using Gma.Modules.Organizations.Domain.ValueObjects;
 
-public sealed class OrganizationEnrollmentLink : AggregateRoot<Guid>
+public sealed partial class OrganizationEnrollmentLink : AggregateRoot<Guid>
 {
     public const int TokenDigestLength = 64;
     public const int AbsoluteMaxClaims = 10_000;

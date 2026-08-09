@@ -1,6 +1,6 @@
 # Organizations Natural Expiry Task
 
-Status: module implementation complete; composition alignment pending
+Status: complete
 Date: 2026-07-28
 
 ## Goal
@@ -159,6 +159,21 @@ Completed on 2026-07-28:
   expiry, claim-before-link processing, capacity release, persisted terminal
   state, and payload-minimal outbox facts.
 
-The remaining work is composition-owned: publish this module revision, advance
-the Skeleton pointer and worker configuration, then consume the expiry facts in
-BunkFy's Workspaces onboarding projection as a separate product slice.
+## Composition Evidence
+
+Composition is complete as of 2026-08-09:
+
+- the canonical Skeleton exposes bounded lifecycle settings as inert by
+  default, enables them only in its development worker, and verifies explicit
+  worker ownership through architecture tests;
+- BunkFy's worker is the single configured lifecycle owner and its host
+  integration test verifies the hosted service and Workspaces subscriptions;
+- Workspaces consumes invitation, enrollment-link, and enrollment-claim expiry
+  facts through Contracts-only handlers, with focused unit and PostgreSQL
+  persistence coverage; and
+- production admission rejects lifecycle ownership on non-worker hosts and
+  rejects ambiguous ownership.
+
+Product onboarding status, retained profile data, recovery, and user-facing
+copy remain in BunkFy. Organizations continues to own deadlines, terminal
+state, maintenance transitions, and expiry facts.

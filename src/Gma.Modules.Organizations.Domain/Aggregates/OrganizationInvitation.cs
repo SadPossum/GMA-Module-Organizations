@@ -7,7 +7,7 @@ using Gma.Modules.Organizations.Domain.Errors;
 using Gma.Modules.Organizations.Domain.Events;
 using Gma.Modules.Organizations.Domain.ValueObjects;
 
-public sealed class OrganizationInvitation : AggregateRoot<Guid>
+public sealed partial class OrganizationInvitation : AggregateRoot<Guid>
 {
     public const int TokenDigestLength = 64;
 

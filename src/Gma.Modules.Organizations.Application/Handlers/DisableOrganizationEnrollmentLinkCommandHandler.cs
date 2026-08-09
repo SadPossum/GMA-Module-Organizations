@@ -51,6 +51,11 @@ internal sealed class DisableOrganizationEnrollmentLinkCommandHandler(
         }
 
         DateTimeOffset nowUtc = clock.UtcNow;
+        if (link.IsExactDisableReplay(command.ExpectedVersion, command.ActorId))
+        {
+            return Result.Success(link.ToDto(nowUtc));
+        }
+
         Result disabled = link.Disable(
             command.ExpectedVersion,
             command.ActorId,

@@ -46,6 +46,11 @@ internal sealed class RevokeOrganizationInvitationCommandHandler(
         }
 
         DateTimeOffset nowUtc = clock.UtcNow;
+        if (invitation.IsExactRevocationReplay(command.ExpectedVersion, command.ActorId))
+        {
+            return Result.Success(invitation.ToDto(nowUtc));
+        }
+
         Result revoked = invitation.Revoke(
             command.ExpectedVersion, command.ActorId, ids.NewId(), nowUtc);
         return revoked.IsSuccess

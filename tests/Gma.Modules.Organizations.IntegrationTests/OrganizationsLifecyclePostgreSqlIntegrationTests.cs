@@ -29,6 +29,10 @@ using InvitationExpiredIntegrationEvent =
 using LinkExpiredIntegrationEvent =
     Gma.Modules.Organizations.Contracts.OrganizationEnrollmentLinkExpiredIntegrationEvent;
 using OrganizationDto = Gma.Modules.Organizations.Contracts.OrganizationDto;
+using OrganizationEnrollmentLinkDto =
+    Gma.Modules.Organizations.Contracts.OrganizationEnrollmentLinkDto;
+using OrganizationInvitationDto =
+    Gma.Modules.Organizations.Contracts.OrganizationInvitationDto;
 using OrganizationMembershipDto = Gma.Modules.Organizations.Contracts.OrganizationMembershipDto;
 
 [Trait("Category", "Docker")]
@@ -169,6 +173,84 @@ public sealed class OrganizationsLifecyclePostgreSqlIntegrationTests
         Assert.DoesNotContain(
             await terminalSource.EnrollmentLinks.AsNoTracking().ToArrayAsync(),
             item => item.Id == linkId);
+    }
+
+    [DockerFact]
+    public async Task Terminal_join_source_retry_proof_survives_commit_and_reload()
+    {
+        await using PostgreSqlContainer postgreSql =
+            new PostgreSqlBuilder("postgres:16-alpine")
+                .WithDatabase("terminal_join_source_retry_tests")
+                .Build();
+        await postgreSql.StartAsync();
+        await using ServiceProvider provider = CreateProvider(
+            postgreSql.GetConnectionString());
+        await MigrateAsync(provider);
+        (
+            Guid organizationId,
+            Guid invitationId,
+            long invitationVersion,
+            Guid enrollmentLinkId,
+            long enrollmentLinkVersion) = await SeedTerminalJoinSourcesAsync(provider);
+        RevokeOrganizationInvitationCommand revoke = new(
+            organizationId,
+            invitationId,
+            invitationVersion,
+            "owner",
+            "user:owner");
+        DisableOrganizationEnrollmentLinkCommand disable = new(
+            organizationId,
+            enrollmentLinkId,
+            enrollmentLinkVersion,
+            "owner",
+            "user:owner");
+
+        Result<OrganizationInvitationDto> firstRevocation =
+            await DispatchAsync(provider, revoke);
+        Result<OrganizationEnrollmentLinkDto> firstDisablement =
+            await DispatchAsync(provider, disable);
+        Assert.True(firstRevocation.IsSuccess, firstRevocation.Error.Code);
+        Assert.True(firstDisablement.IsSuccess, firstDisablement.Error.Code);
+        int outboxAfterFirst = await CountOutboxAsync(provider);
+
+        Result<OrganizationInvitationDto> revocationReplay =
+            await DispatchAsync(provider, revoke);
+        Result<OrganizationEnrollmentLinkDto> disablementReplay =
+            await DispatchAsync(provider, disable);
+
+        Assert.True(revocationReplay.IsSuccess, revocationReplay.Error.Code);
+        Assert.True(disablementReplay.IsSuccess, disablementReplay.Error.Code);
+        Assert.Equal(firstRevocation.Value, revocationReplay.Value);
+        Assert.Equal(firstDisablement.Value, disablementReplay.Value);
+        Assert.Equal(outboxAfterFirst, await CountOutboxAsync(provider));
+
+        await using AsyncServiceScope verificationScope = provider.CreateAsyncScope();
+        OrganizationsDbContext verification = verificationScope.ServiceProvider
+            .GetRequiredService<OrganizationsDbContext>();
+        OrganizationInvitation storedInvitation = await verification.Invitations
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == invitationId);
+        OrganizationEnrollmentLink storedLink = await verification.EnrollmentLinks
+            .AsNoTracking()
+            .SingleAsync(item => item.Id == enrollmentLinkId);
+        Assert.Equal(OrganizationInvitationState.Revoked, storedInvitation.Status);
+        Assert.Equal(invitationVersion + 1, storedInvitation.Version);
+        Assert.Equal("user:owner", storedInvitation.LastChangedBy);
+        Assert.Equal(OrganizationEnrollmentLinkState.Disabled, storedLink.Status);
+        Assert.Equal(enrollmentLinkVersion + 1, storedLink.Version);
+        Assert.Equal("user:owner", storedLink.LastChangedBy);
+        Assert.Equal(
+            1,
+            await verification.OutboxMessages.CountAsync(message =>
+                message.EventType ==
+                    typeof(Gma.Modules.Organizations.Contracts
+                        .OrganizationInvitationChangedIntegrationEvent).FullName));
+        Assert.Equal(
+            1,
+            await verification.OutboxMessages.CountAsync(message =>
+                message.EventType ==
+                    typeof(Gma.Modules.Organizations.Contracts
+                        .OrganizationEnrollmentLinkChangedIntegrationEvent).FullName));
     }
 
     [DockerFact]
@@ -364,6 +446,62 @@ public sealed class OrganizationsLifecyclePostgreSqlIntegrationTests
             Now).Value;
         dbContext.AddRange(organization, owner);
         await dbContext.SaveChangesAsync();
+    }
+
+    private static async Task<(
+        Guid OrganizationId,
+        Guid InvitationId,
+        long InvitationVersion,
+        Guid EnrollmentLinkId,
+        long EnrollmentLinkVersion)> SeedTerminalJoinSourcesAsync(ServiceProvider provider)
+    {
+        await using AsyncServiceScope scope = provider.CreateAsyncScope();
+        OrganizationsDbContext dbContext = scope.ServiceProvider
+            .GetRequiredService<OrganizationsDbContext>();
+        Organization organization = Organization.Create(
+            Guid.NewGuid(),
+            "Terminal Retry House",
+            "terminal-retry-house",
+            "user:owner",
+            Guid.NewGuid(),
+            Now.AddHours(-1)).Value;
+        OrganizationMembership owner = OrganizationMembership.Create(
+            Guid.NewGuid(),
+            organization.Id,
+            "owner",
+            OrganizationMembershipRole.Owner,
+            "user:owner",
+            Guid.NewGuid(),
+            Now.AddHours(-1)).Value;
+        OrganizationInvitation invitation = OrganizationInvitation.Create(
+            Guid.NewGuid(),
+            organization.Id,
+            "owner",
+            "invitee@example.test",
+            new string('c', OrganizationInvitation.TokenDigestLength),
+            Now.AddDays(1),
+            "user:owner",
+            Guid.NewGuid(),
+            Now.AddHours(-1)).Value;
+        OrganizationEnrollmentLink link = OrganizationEnrollmentLink.Create(
+            Guid.NewGuid(),
+            organization.Id,
+            "owner",
+            new string('d', OrganizationEnrollmentLink.TokenDigestLength),
+            Now.AddDays(1),
+            10,
+            OrganizationEnrollmentApprovalMode.Automatic,
+            "user:owner",
+            Guid.NewGuid(),
+            Now.AddHours(-1)).Value;
+        dbContext.AddRange(organization, owner, invitation, link);
+        await dbContext.SaveChangesAsync();
+        return (
+            organization.Id,
+            invitation.Id,
+            invitation.Version,
+            link.Id,
+            link.Version);
     }
 
     private static async Task<(long OrganizationVersion, long MembershipVersion)>
