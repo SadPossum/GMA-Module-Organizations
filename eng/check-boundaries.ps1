@@ -57,7 +57,8 @@ $sharedGovernanceHandlers = @(
     'ResolveOrganizationJoinRequestCommandHandler',
     'RevokeOrganizationInvitationCommandHandler',
     'RotateOrganizationEnrollmentLinkCommandHandler',
-    'UpdateOrganizationCommandHandler'
+    'UpdateOrganizationCommandHandler',
+    'WithdrawOrganizationJoinRequestCommandHandler'
 )
 $exclusiveGovernanceHandlers = @(
     'ChangeOrganizationLifecycleCommandHandler',
@@ -76,7 +77,8 @@ $uncoordinatedHandlers = @(
 $joinSubjectHandlers = @(
     'AcceptOrganizationInvitationCommandHandler',
     'ClaimOrganizationEnrollmentLinkCommandHandler',
-    'ResolveOrganizationJoinRequestCommandHandler'
+    'ResolveOrganizationJoinRequestCommandHandler',
+    'WithdrawOrganizationJoinRequestCommandHandler'
 )
 $classifiedHandlers = @(
     $sharedGovernanceHandlers
