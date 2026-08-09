@@ -1,6 +1,6 @@
 # Organizations Governance Transaction Consistency Task
 
-Status: module implementation complete; composition verification pending
+Status: completed
 Date: 2026-08-09
 
 ## Goal
@@ -110,7 +110,7 @@ No governance lock:
   parallel shared work, and independence across organizations.
 - [x] Add a guardrail that fails when a newly added organization-scoped command
   bypasses an explicit governance classification.
-- [ ] Run the completed-slice Organizations gates, then verify GMA Skeleton and
+- [x] Run the completed-slice Organizations gates, then verify GMA Skeleton and
   BunkFy consumers without regenerating contracts unless the public surface
   actually changes.
 
@@ -129,6 +129,22 @@ No governance lock:
   it reports pre-existing line-ending, encoding, whitespace, and analyzer
   findings across untouched Organizations and Framework sources. No unrelated
   formatting was changed in this slice.
+
+## Consumer Verification
+
+- GMA Skeleton passed its full non-Docker verification at consumer commit
+  `c0dc8a8a42410a28cb6b7dcce945515b0d85f86f`, including solution and source
+  package synchronization, a zero-warning build, both-provider migration drift,
+  and all fast test suites.
+- BunkFy backend passed its full non-Docker verification with Organizations
+  implementation commit `7aa2f54a3416b793dd4766403815fa8078ddf592`, including
+  a zero-warning build, all migration drift checks, 197 Organizations tests,
+  94 architecture tests, and 54 host integration tests.
+- The slice does not change Organizations Contracts, HTTP endpoints, OpenAPI,
+  or generated TypeScript. The BunkFy web consumer therefore required no
+  regeneration or source change.
+- This completion update changes documentation only; consumers pin its final
+  source commit through their normal source-package synchronization checks.
 
 ## Not In This Slice
 
