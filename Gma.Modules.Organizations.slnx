@@ -43,10 +43,10 @@
     <File Path="docs/organizations-natural-expiry-task.md" />
     <File Path="docs/organizations-ordinal-identity-storage-task.md" />
     <File Path="docs/organizations-ownership-transfer-retry-safety-task.md" />
-    <File Path="docs/organizations-truthful-pagination-task.md" />
     <File Path="docs/organizations-production-hardening-task.md" />
     <File Path="docs/organizations-scope-lifecycle-task.md" />
     <File Path="docs/organizations-task.md" />
+    <File Path="docs/organizations-truthful-pagination-task.md" />
   </Folder>
   <Folder Name="/eng/">
     <File Path="eng/bootstrap-source-roots.ps1" />
