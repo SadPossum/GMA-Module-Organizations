@@ -1,6 +1,6 @@
 # Organizations Terminal Join-Source Retry Safety Task
 
-Status: implementation complete; publication pending
+Status: complete
 Date: 2026-08-09
 
 ## Goal
@@ -64,7 +64,7 @@ operation id or an operation journal.
   migration models drift-free.
 - [x] Verify the existing Contracts facade and BunkFy workspace source manager
   inherit the behavior without a product-specific workaround.
-- [ ] Run one consolidated non-Docker gate and one focused provider gate at the
+- [x] Run one consolidated non-Docker gate and one focused provider gate at the
   completed slice boundary, then publish exact consumer pins.
 
 ## Implementation Evidence
@@ -83,6 +83,14 @@ Verified locally on 2026-08-09:
 - the existing Contracts facade and BunkFy Workspaces manager continue to send
   the same expected-version requests, so no HTTP, DTO, generated client,
   Framework, Extensions, or product-domain change is required.
+
+Publication evidence:
+
+- Organizations implementation `77372760be71497212e37f1e295a99077d8e1ebe`;
+- canonical Skeleton consumer pin `c0a695fdf2d9a92f4ea40135916479c67efe35c0`;
+- BunkFy backend consumer pin `5a5f156c5d3fe39bc69e4f7fc796cb1e9a58790f`;
+  and
+- BunkFy root backend pin `f057962ac425a56faedacd7672e12ed629f3b65f`.
 
 ## Not In This Slice
 
