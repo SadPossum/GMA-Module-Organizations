@@ -13,6 +13,7 @@ public sealed class OrganizationContractEnumJsonTests
         new()
         {
             { typeof(OrganizationJoinAdmissionOperation), OrganizationJoinAdmissionOperation.ApproveEnrollment, "approve-enrollment" },
+            { typeof(OrganizationJoinAdmissionDecision), OrganizationJoinAdmissionDecision.Unavailable, "unavailable" },
             { typeof(OrganizationJoinSourceAuthorizationDecision), OrganizationJoinSourceAuthorizationDecision.NotApplicable, "not-applicable" },
             { typeof(OrganizationJoinSourceAuthorizationOperation), OrganizationJoinSourceAuthorizationOperation.ResolveJoinRequest, "resolve-join-request" },
             { typeof(OrganizationMutationAdmissionDecision), OrganizationMutationAdmissionDecision.Unavailable, "unavailable" },

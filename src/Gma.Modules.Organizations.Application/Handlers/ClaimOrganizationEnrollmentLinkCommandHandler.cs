@@ -98,7 +98,7 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
                 OrganizationApplicationErrors.JoinRequestConflict);
         }
 
-        bool productReady = await joinAdmissionPolicy.IsAllowedAsync(
+        Result productAdmission = await joinAdmissionPolicy.AuthorizeAsync(
             new OrganizationJoinAdmissionContext(
                 OrganizationJoinAdmissionOperation.ClaimEnrollment,
                 organization.Id,
@@ -108,10 +108,10 @@ internal sealed class ClaimOrganizationEnrollmentLinkCommandHandler(
                 subject.Value.Value,
                 OrganizationMappings.MapMode(link.ApprovalMode)),
             cancellationToken).ConfigureAwait(false);
-        if (!productReady)
+        if (productAdmission.IsFailure)
         {
             return Result.Failure<OrganizationEnrollmentOutcomeDto>(
-                OrganizationApplicationErrors.JoinAdmissionRejected);
+                productAdmission.Error);
         }
 
         Result reserved = link.ReserveClaim(command.ActorId, ids.NewId(), nowUtc);

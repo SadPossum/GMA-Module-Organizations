@@ -355,7 +355,7 @@ public sealed class OrganizationInvitationFlowTests
         Organization organization = Assert.Single(repository.Organizations);
         OrganizationInvitationIssuedDto issued = await IssueAsync(
             services, organization, null, 24);
-        policy.IsAllowed = false;
+        policy.Decision = OrganizationJoinAdmissionDecision.Denied;
 
         var denied = await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
             issued.Token, "member", "user:member"), CancellationToken.None);
@@ -364,10 +364,10 @@ public sealed class OrganizationInvitationFlowTests
         Assert.DoesNotContain(repository.Memberships, membership => membership.SubjectId == "member");
         Assert.Null(Assert.Single(repository.Invitations).AcceptedSubjectId);
 
-        policy.IsAllowed = true;
+        policy.Decision = OrganizationJoinAdmissionDecision.Allowed;
         Assert.True((await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
             issued.Token, "member", "user:member"), CancellationToken.None)).IsSuccess);
-        policy.IsAllowed = false;
+        policy.Decision = OrganizationJoinAdmissionDecision.Denied;
         var retry = await accept.HandleAsync(new AcceptOrganizationInvitationCommand(
             issued.Token, "member", "user:member"), CancellationToken.None);
 
@@ -377,6 +377,39 @@ public sealed class OrganizationInvitationFlowTests
         Assert.Equal(OrganizationJoinAdmissionOperation.AcceptInvitation, context.Operation);
         Assert.Equal(issued.Invitation.InvitationId, context.SourceId);
         Assert.Equal("member", context.ApplicantSubjectId);
+    }
+
+    [Fact]
+    public async Task Product_policy_unavailability_mutates_neither_invitation_nor_membership()
+    {
+        TestRepository repository = CreateRepository();
+        TestClock clock = new();
+        RecordingJoinPolicy policy = new()
+        {
+            Decision = OrganizationJoinAdmissionDecision.Unavailable
+        };
+        using ServiceProvider services = CreateServices(repository, clock, policy);
+        var accept = services.GetRequiredService<
+            ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationInvitationIssuedDto issued = await IssueAsync(
+            services, organization, null, 24);
+        OrganizationInvitation invitation = Assert.Single(repository.Invitations);
+        long invitationVersion = invitation.Version;
+        int invitationEventCount = invitation.DomainEvents.Count;
+
+        Result<OrganizationInvitationAcceptanceDto> result = await accept.HandleAsync(
+            new AcceptOrganizationInvitationCommand(
+                issued.Token,
+                "member",
+                "user:member"),
+            CancellationToken.None);
+
+        Assert.Equal(OrganizationApplicationErrors.JoinAdmissionUnavailable, result.Error);
+        Assert.DoesNotContain(repository.Memberships, membership => membership.SubjectId == "member");
+        Assert.Null(invitation.AcceptedSubjectId);
+        Assert.Equal(invitationVersion, invitation.Version);
+        Assert.Equal(invitationEventCount, invitation.DomainEvents.Count);
     }
 
     [Fact]
@@ -490,15 +523,16 @@ public sealed class OrganizationInvitationFlowTests
 
     private sealed class RecordingJoinPolicy : IOrganizationJoinAdmissionPolicy
     {
-        public bool IsAllowed { get; set; } = true;
+        public OrganizationJoinAdmissionDecision Decision { get; set; } =
+            OrganizationJoinAdmissionDecision.Allowed;
         public List<OrganizationJoinAdmissionContext> Contexts { get; } = [];
 
-        public ValueTask<bool> IsAllowedAsync(
+        public ValueTask<OrganizationJoinAdmissionDecision> EvaluateAsync(
             OrganizationJoinAdmissionContext context,
             CancellationToken cancellationToken = default)
         {
             this.Contexts.Add(context);
-            return ValueTask.FromResult(this.IsAllowed);
+            return ValueTask.FromResult(this.Decision);
         }
     }
 

@@ -133,7 +133,7 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
                 OrganizationApplicationErrors.MembershipConflict);
         }
 
-        bool productReady = await joinAdmissionPolicy.IsAllowedAsync(
+        Result productAdmission = await joinAdmissionPolicy.AuthorizeAsync(
             new OrganizationJoinAdmissionContext(
                 OrganizationJoinAdmissionOperation.ApproveEnrollment,
                 organization.Id,
@@ -143,10 +143,10 @@ internal sealed class ResolveOrganizationJoinRequestCommandHandler(
                 command.SubjectId,
                 OrganizationMappings.MapMode(link.ApprovalMode)),
             cancellationToken).ConfigureAwait(false);
-        if (!productReady)
+        if (productAdmission.IsFailure)
         {
             return Result.Failure<OrganizationEnrollmentOutcomeDto>(
-                OrganizationApplicationErrors.JoinAdmissionRejected);
+                productAdmission.Error);
         }
 
         Result<OrganizationMembership> membership = await OrganizationMemberProvisioning.EnsureActiveMemberAsync(

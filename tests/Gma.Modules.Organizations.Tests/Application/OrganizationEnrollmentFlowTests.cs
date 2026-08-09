@@ -372,7 +372,7 @@ public sealed partial class OrganizationEnrollmentFlowTests
 
         Result<OrganizationEnrollmentOutcomeDto> approved = await resolveHandler.HandleAsync(
             command, CancellationToken.None);
-        policy.IsAllowed = false;
+        policy.Decision = OrganizationJoinAdmissionDecision.Denied;
         Result<OrganizationEnrollmentOutcomeDto> replay = await resolveHandler.HandleAsync(
             command, CancellationToken.None);
         Result<OrganizationEnrollmentOutcomeDto> oppositeDecision = await resolveHandler.HandleAsync(
@@ -710,14 +710,21 @@ public sealed partial class OrganizationEnrollmentFlowTests
         Assert.Equal(1, Assert.Single(repository.EnrollmentLinks).ReservedClaims);
     }
 
-    [Fact]
-    public async Task Product_policy_denial_mutates_neither_claim_capacity_nor_membership()
+    [Theory]
+    [InlineData(OrganizationJoinAdmissionDecision.Denied, "Organizations.JoinAdmissionRejected")]
+    [InlineData(OrganizationJoinAdmissionDecision.Unavailable, "Organizations.JoinAdmissionUnavailable")]
+    public async Task Product_policy_failure_mutates_neither_claim_capacity_nor_membership(
+        OrganizationJoinAdmissionDecision decision,
+        string expectedErrorCode)
     {
         TestOrganizationRepository repository = CreateRepository();
-        RecordingJoinPolicy policy = new() { IsAllowed = false };
+        RecordingJoinPolicy policy = new() { Decision = decision };
         using ServiceProvider services = CreateServices(repository, new TestClock(Now), policy);
         OrganizationEnrollmentLinkIssuedDto issued = await IssueAsync(
             services, repository, OrganizationEnrollmentApprovalMode.Automatic, maximumClaims: 1);
+        OrganizationEnrollmentLink link = Assert.Single(repository.EnrollmentLinks);
+        long linkVersion = link.Version;
+        int linkEventCount = link.DomainEvents.Count;
         var claimHandler = services.GetRequiredService<
             ICommandHandler<ClaimOrganizationEnrollmentLinkCommand, OrganizationEnrollmentOutcomeDto>>();
 
@@ -725,10 +732,12 @@ public sealed partial class OrganizationEnrollmentFlowTests
             issued.Token, "member", "user:member"), CancellationToken.None);
 
         Assert.True(denied.IsFailure);
-        Assert.Equal(OrganizationApplicationErrors.JoinAdmissionRejected, denied.Error);
+        Assert.Equal(expectedErrorCode, denied.Error.Code);
         Assert.Empty(repository.EnrollmentClaims);
         Assert.DoesNotContain(repository.Memberships, item => item.SubjectId == "member");
-        Assert.Equal(0, Assert.Single(repository.EnrollmentLinks).ReservedClaims);
+        Assert.Equal(0, link.ReservedClaims);
+        Assert.Equal(linkVersion, link.Version);
+        Assert.Equal(linkEventCount, link.DomainEvents.Count);
         OrganizationJoinAdmissionContext context = Assert.Single(policy.Contexts);
         Assert.Equal(OrganizationJoinAdmissionOperation.ClaimEnrollment, context.Operation);
         Assert.Equal(issued.EnrollmentLink.EnrollmentLinkId, context.SourceId);
@@ -736,8 +745,12 @@ public sealed partial class OrganizationEnrollmentFlowTests
         Assert.Null(context.ClaimId);
     }
 
-    [Fact]
-    public async Task Product_policy_can_allow_a_pending_claim_but_deny_approval()
+    [Theory]
+    [InlineData(OrganizationJoinAdmissionDecision.Denied, "Organizations.JoinAdmissionRejected")]
+    [InlineData(OrganizationJoinAdmissionDecision.Unavailable, "Organizations.JoinAdmissionUnavailable")]
+    public async Task Product_policy_can_allow_a_pending_claim_but_fail_approval(
+        OrganizationJoinAdmissionDecision decision,
+        string expectedErrorCode)
     {
         TestOrganizationRepository repository = CreateRepository();
         RecordingJoinPolicy policy = new();
@@ -750,7 +763,7 @@ public sealed partial class OrganizationEnrollmentFlowTests
             ICommandHandler<ResolveOrganizationJoinRequestCommand, OrganizationEnrollmentOutcomeDto>>();
         var pending = await claimHandler.HandleAsync(new ClaimOrganizationEnrollmentLinkCommand(
             issued.Token, "member", "user:member"), CancellationToken.None);
-        policy.IsAllowed = false;
+        policy.Decision = decision;
 
         Organization organization = Assert.Single(repository.Organizations);
         var denied = await resolveHandler.HandleAsync(new ResolveOrganizationJoinRequestCommand(
@@ -758,7 +771,7 @@ public sealed partial class OrganizationEnrollmentFlowTests
             pending.Value.Claim.Version, "owner", "user:owner"), CancellationToken.None);
 
         Assert.True(denied.IsFailure);
-        Assert.Equal(OrganizationApplicationErrors.JoinAdmissionRejected, denied.Error);
+        Assert.Equal(expectedErrorCode, denied.Error.Code);
         Assert.Equal(
             Gma.Modules.Organizations.Domain.Enums.OrganizationEnrollmentClaimState.Pending,
             Assert.Single(repository.EnrollmentClaims).Status);
@@ -886,15 +899,16 @@ public sealed partial class OrganizationEnrollmentFlowTests
 
     private sealed class RecordingJoinPolicy : IOrganizationJoinAdmissionPolicy
     {
-        public bool IsAllowed { get; set; } = true;
+        public OrganizationJoinAdmissionDecision Decision { get; set; } =
+            OrganizationJoinAdmissionDecision.Allowed;
         public List<OrganizationJoinAdmissionContext> Contexts { get; } = [];
 
-        public ValueTask<bool> IsAllowedAsync(
+        public ValueTask<OrganizationJoinAdmissionDecision> EvaluateAsync(
             OrganizationJoinAdmissionContext context,
             CancellationToken cancellationToken = default)
         {
             this.Contexts.Add(context);
-            return ValueTask.FromResult(this.IsAllowed);
+            return ValueTask.FromResult(this.Decision);
         }
     }
 

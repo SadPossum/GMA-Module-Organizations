@@ -31,6 +31,9 @@ The reusable host policy seam for owner-facing membership changes is tracked in
 The reusable admission seam for organization and join-source mutations is
 tracked in
 [Organizations Mutation Admission Policy Task](organizations-mutation-admission-policy-task.md).
+Truthful product-owned join admission denial and availability semantics are
+tracked in
+[Organizations Join-Admission Availability Task](organizations-join-admission-availability-task.md).
 The Contracts facade for product-owned source management is tracked in
 [Organizations Join Source Management Task](organizations-join-source-management-task.md).
 Retry-safe invitation reissue and enrollment-link rotation are tracked in
@@ -136,6 +139,11 @@ The administration surface lives under `/api/admin/organizations` and uses globa
 ```
 
 Recipient-bound invitations fail closed unless a host or extension replaces `IOrganizationInvitationAdmissionPolicy` with verified-email logic. Unbound invitations and enrollment links never create owners.
+
+Product admission policies return `Allowed`, `Denied`, or `Unavailable`.
+Deliberate denial is a state conflict; unavailable or invalid policy state and
+non-cancellation policy failures fail closed as a retryable service error. Exact
+replays of already committed join outcomes do not re-run product admission.
 
 ## Operations
 

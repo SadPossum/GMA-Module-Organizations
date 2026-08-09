@@ -171,7 +171,7 @@ public sealed partial class OrganizationEnrollmentFlowTests
             services,
             repository);
         policy.Contexts.Clear();
-        policy.IsAllowed = false;
+        policy.Decision = OrganizationJoinAdmissionDecision.Denied;
         var handler = services.GetRequiredService<ICommandHandler<
             WithdrawOrganizationJoinRequestCommand,
             OrganizationEnrollmentOutcomeDto>>();

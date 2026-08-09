@@ -105,6 +105,22 @@ public sealed class OrganizationEndpointSupportTests
     }
 
     [Theory]
+    [InlineData("Organizations.JoinAdmissionRejected", StatusCodes.Status409Conflict)]
+    [InlineData("Organizations.JoinAdmissionUnavailable", StatusCodes.Status503ServiceUnavailable)]
+    public void Join_admission_failures_have_stable_http_statuses(
+        string errorCode,
+        int expectedStatusCode)
+    {
+        Error error = errorCode == OrganizationApplicationErrors.JoinAdmissionRejected.Code
+            ? OrganizationApplicationErrors.JoinAdmissionRejected
+            : OrganizationApplicationErrors.JoinAdmissionUnavailable;
+
+        Assert.Equal(
+            expectedStatusCode,
+            OrganizationEndpointSupport.ErrorStatusCodes.GetStatusCode(error));
+    }
+
+    [Theory]
     [InlineData("Organizations.MutationRejected", StatusCodes.Status409Conflict)]
     [InlineData("Organizations.MutationAdmissionUnavailable", StatusCodes.Status503ServiceUnavailable)]
     public void Mutation_admission_failures_have_stable_http_statuses(

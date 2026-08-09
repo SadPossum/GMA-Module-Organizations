@@ -110,7 +110,7 @@ internal sealed class AcceptOrganizationInvitationCommandHandler(
             return Result.Failure<OrganizationInvitationAcceptanceDto>(admission.Error);
         }
 
-        bool productReady = await joinAdmissionPolicy.IsAllowedAsync(
+        Result productAdmission = await joinAdmissionPolicy.AuthorizeAsync(
             new OrganizationJoinAdmissionContext(
                 OrganizationJoinAdmissionOperation.AcceptInvitation,
                 organization.Id,
@@ -120,10 +120,10 @@ internal sealed class AcceptOrganizationInvitationCommandHandler(
                 subject.Value.Value,
                 null),
             cancellationToken).ConfigureAwait(false);
-        if (!productReady)
+        if (productAdmission.IsFailure)
         {
             return Result.Failure<OrganizationInvitationAcceptanceDto>(
-                OrganizationApplicationErrors.JoinAdmissionRejected);
+                productAdmission.Error);
         }
 
         if (membership is null)

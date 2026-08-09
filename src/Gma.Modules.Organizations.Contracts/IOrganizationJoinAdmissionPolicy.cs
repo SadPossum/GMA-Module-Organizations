@@ -2,7 +2,7 @@ namespace Gma.Modules.Organizations.Contracts;
 
 public interface IOrganizationJoinAdmissionPolicy
 {
-    ValueTask<bool> IsAllowedAsync(
+    ValueTask<OrganizationJoinAdmissionDecision> EvaluateAsync(
         OrganizationJoinAdmissionContext context,
         CancellationToken cancellationToken = default);
 }
