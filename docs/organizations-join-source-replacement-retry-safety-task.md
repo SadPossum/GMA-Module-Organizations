@@ -1,6 +1,6 @@
 # Organizations Join Source Replacement Retry Safety Task
 
-Status: in progress
+Status: completed
 Date: 2026-08-09
 
 ## Goal
@@ -85,8 +85,21 @@ durable lineage because the token itself must remain one-time only.
   nullable tokens, and issuance outcomes.
 - [x] Prove exact retry, changed retry, same-predecessor competition, and
   cross-kind replacement collision with focused unit and PostgreSQL coverage.
-- [ ] Align GMA Skeleton and BunkFy generated consumers, then run consolidated
+- [x] Align GMA Skeleton and BunkFy generated consumers, then run consolidated
   module and consumer gates at the completed-slice boundary.
+
+## Verification
+
+- Organizations boundary checks, zero-warning build, both provider migration
+  drift checks, 194 unit tests, package audit, and 9 PostgreSQL integration
+  tests passed.
+- GMA Extensions boundaries, 30 tests, and package audit passed.
+- GMA Skeleton source, security, release, generated-selection, build,
+  migration, architecture, and non-Docker integration gates passed.
+- BunkFy backend build, migration, architecture, module, extension, and 54
+  non-Docker host integration tests passed.
+- BunkFy web typecheck, lint, 253 tests, production build, and generated-contract
+  freshness checks passed.
 
 ## Migration Plan
 
