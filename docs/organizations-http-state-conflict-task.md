@@ -1,6 +1,6 @@
 # Organizations HTTP State-Conflict Task
 
-Status: implementation verified; publication pending
+Status: complete
 Date: 2026-08-09
 
 ## Goal
@@ -41,7 +41,7 @@ refreshing state or choosing another workflow.
   conflicts to HTTP 409.
 - [x] Add a focused API guard covering the complete conflict set and retaining
   the 400 fallback for malformed input.
-- [ ] Run the Organizations fast gate once at the completed slice boundary,
+- [x] Run the Organizations fast gate once at the completed slice boundary,
   publish the module pin, then align canonical consumers.
 
 ## Implementation Evidence
@@ -58,6 +58,18 @@ Verified locally on 2026-08-09:
 The change is confined to the Organizations application error catalog, API
 status map, focused API tests, and this task record. Framework behavior and
 public error codes remain unchanged.
+
+Publication evidence:
+
+- Organizations implementation `941c223057d10b0d80ef1f6d43751098b846cf29`;
+- Organizations synchronized solution pin
+  `465d183b285a65fae592b620458a7f23800c9ac8`;
+- canonical Skeleton consumer pin
+  `a618860f5418f25c89221076c79dd399f005afef`;
+- BunkFy backend consumer pin
+  `03a3a09b53486703332f7721d173e46290be10ae`; and
+- BunkFy root backend pin
+  `bdb36372333787e83e0bf7619cc2aa1d1e482e88`.
 
 ## Not In This Slice
 
