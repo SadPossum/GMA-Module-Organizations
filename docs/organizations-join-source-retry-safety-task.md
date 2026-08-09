@@ -1,6 +1,6 @@
 # Organizations Join Source Retry Safety Task
 
-Status: implementation complete; consumer alignment pending
+Status: complete
 Date: 2026-08-09
 
 ## Goal
@@ -72,10 +72,10 @@ Two production gaps remain:
 - [x] Expose one-time-token and exact-replay outcomes without response caching.
 - [x] Prove exact, conflicting, and cross-kind concurrent requests with focused
   PostgreSQL integration coverage.
-- [ ] Align GMA Skeleton and BunkFy API consumers, then run consolidated module
+- [x] Align GMA Skeleton and BunkFy API consumers, then run consolidated module
   and consumer gates at the completed-slice boundary.
 
-## Verification In Progress
+## Completion Evidence
 
 - Organizations verification passed boundaries, build with zero warnings,
   SQL Server and PostgreSQL migration drift, 189 unit tests, dependency audit,
@@ -87,7 +87,10 @@ Two production gaps remain:
   authentication-assurance Docker test passed against the changed raw endpoint.
 - BunkFy web passed typecheck, lint, 253 tests, and production build after
   regenerating OpenAPI contracts and aligning retry-aware issuance types.
-- GMA Skeleton pinning and verification remain before the task is complete.
+- GMA Skeleton passed source-solution synchronization, repository security and
+  release guards, generated app-selection composition, zero-warning builds,
+  migration drift, 269 architecture tests, 17 host integration tests, and 11
+  service-default tests with the Organizations source pinned to this change.
 
 ## Not In This Slice
 
