@@ -2,6 +2,10 @@
 
 Status: implemented and verified
 
+Boundary note: the original implementation correctly established the bounded
+query semantics, but its Application-port placement is superseded by
+[Organizations Access Contract Boundary Task](organizations-access-contract-boundary-task.md).
+
 ## Goal
 
 Provide a bounded, provider-neutral way for offline workflows to intersect an
@@ -12,10 +16,10 @@ jobs, products, or audience policy.
 
 ## Contract
 
-`IOrganizationAccessCandidateFilter` belongs in the Organizations application
-ports. It accepts an organization id and no more than 500 candidate subject ids,
-normalizes and deduplicates them, and returns only subjects whose organization
-and membership are both active.
+`IOrganizationAccessCandidateFilter` accepts an organization id and no more
+than 500 candidate subject ids, normalizes and deduplicates them, and returns
+only subjects whose organization and membership are both active. Its current
+cross-module package boundary is addressed by the follow-up task above.
 
 The contract deliberately does not list an organization's membership. Callers
 must already have a legitimate candidate set. The persistence implementation

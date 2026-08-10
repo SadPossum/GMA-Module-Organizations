@@ -12,6 +12,7 @@ public sealed class OrganizationContractEnumJsonTests
     public static TheoryData<Type, object, string> ContractEnumCases =>
         new()
         {
+            { typeof(OrganizationAccessDecision), OrganizationAccessDecision.MembershipInactive, "membership-inactive" },
             { typeof(OrganizationCreationAdmissionDecision), OrganizationCreationAdmissionDecision.SubjectVerificationRequired, "subject-verification-required" },
             { typeof(OrganizationInvitationRecipientVerificationDecision), OrganizationInvitationRecipientVerificationDecision.NotVerified, "not-verified" },
             { typeof(OrganizationJoinAdmissionOperation), OrganizationJoinAdmissionOperation.ApproveEnrollment, "approve-enrollment" },

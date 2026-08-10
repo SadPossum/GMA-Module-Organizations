@@ -39,6 +39,9 @@ Truthful denial and temporary-availability behavior for that seam is tracked in
 Typed Contracts boundaries and truthful availability for organization creation
 and invitation recipient verification are tracked in
 [Organizations Admission Contract Boundary Task](organizations-admission-contract-boundary-task.md).
+The Contracts boundary and truthful tenant-admission mapping for authoritative
+organization access reads are tracked in
+[Organizations Access Contract Boundary Task](organizations-access-contract-boundary-task.md).
 The reusable admission seam for organization and join-source mutations is
 tracked in
 [Organizations Mutation Admission Policy Task](organizations-mutation-admission-policy-task.md).
@@ -83,8 +86,8 @@ Cross-provider ordinal storage for case-preserving subject and actor identifiers
 is tracked in
 [Organizations Ordinal Identity Storage Task](organizations-ordinal-identity-storage-task.md).
 
-The bounded application-port filter for offline workflows that already hold a
-candidate set is tracked in
+The bounded access filter for offline workflows that already hold a candidate
+set was introduced in
 [Organizations Access Candidate Filter Task](organizations-access-candidate-filter-task.md).
 
 The durable natural-expiry lifecycle for invitations, enrollment links, and

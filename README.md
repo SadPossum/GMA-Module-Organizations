@@ -14,6 +14,11 @@ admit, deny, or temporarily defer owner-facing organization and join-source
 mutations before Organizations changes state. The seam is optional and contains
 no product lifecycle vocabulary.
 
+Cross-module access checks use the Contracts-only
+`IOrganizationAccessDecisionReader` for one subject or the bounded
+`IOrganizationAccessCandidateFilter` to intersect an existing candidate set.
+Neither capability enumerates membership or owns product authorization policy.
+
 This repository is consumed source-first and is mounted by composition repositories as `gma/modules/organizations`. Product names such as workspace, team, or account group remain outside this module.
 
 Opaque subject and actor identifiers are trimmed, case-preserving, and compared

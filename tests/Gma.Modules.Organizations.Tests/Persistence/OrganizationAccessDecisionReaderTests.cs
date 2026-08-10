@@ -1,12 +1,15 @@
 namespace Gma.Modules.Organizations.Tests.Persistence;
 
-using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
 using Gma.Modules.Organizations.Persistence;
 using Gma.Modules.Organizations.Persistence.Access;
 using Microsoft.EntityFrameworkCore;
 using Xunit;
+using OrganizationAccessContract =
+    Gma.Modules.Organizations.Contracts.OrganizationAccessContract;
+using OrganizationAccessDecision =
+    Gma.Modules.Organizations.Contracts.OrganizationAccessDecision;
 
 [Trait("Category", "Unit")]
 public sealed class OrganizationAccessDecisionReaderTests
@@ -114,9 +117,29 @@ public sealed class OrganizationAccessDecisionReaderTests
             CancellationToken.None));
         await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.FilterAllowedAsync(
             Guid.NewGuid(),
-            Enumerable.Range(0, IOrganizationAccessCandidateFilter.MaximumCandidateCount + 1)
+            Enumerable.Range(0, OrganizationAccessContract.MaximumCandidateCount + 1)
                 .Select(index => $"member-{index}")
                 .ToArray(),
+            CancellationToken.None));
+    }
+
+    [Fact]
+    public async Task Reader_rejects_invalid_requests_before_querying()
+    {
+        await using OrganizationsDbContext dbContext = CreateDbContext();
+        OrganizationAccessDecisionReader reader = new(dbContext);
+
+        await Assert.ThrowsAsync<ArgumentOutOfRangeException>(() => reader.ReadAsync(
+            Guid.Empty,
+            "member-a",
+            CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => reader.ReadAsync(
+            Guid.NewGuid(),
+            "member a",
+            CancellationToken.None));
+        await Assert.ThrowsAsync<ArgumentException>(() => reader.ReadAsync(
+            Guid.NewGuid(),
+            null!,
             CancellationToken.None));
     }
 

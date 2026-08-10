@@ -1,9 +1,7 @@
-namespace Gma.Modules.Organizations.Application.Ports;
+namespace Gma.Modules.Organizations.Contracts;
 
 public interface IOrganizationAccessCandidateFilter
 {
-    const int MaximumCandidateCount = 500;
-
     Task<IReadOnlyList<string>> FilterAllowedAsync(
         Guid organizationId,
         IReadOnlyCollection<string> candidateSubjectIds,

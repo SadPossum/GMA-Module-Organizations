@@ -1,4 +1,4 @@
-namespace Gma.Modules.Organizations.Application.Ports;
+namespace Gma.Modules.Organizations.Contracts;
 
 public interface IOrganizationAccessDecisionReader
 {

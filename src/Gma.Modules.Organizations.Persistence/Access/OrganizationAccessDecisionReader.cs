@@ -1,7 +1,8 @@
 namespace Gma.Modules.Organizations.Persistence.Access;
 
-using Gma.Modules.Organizations.Application.Ports;
+using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Enums;
+using Gma.Modules.Organizations.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
 
 internal sealed class OrganizationAccessDecisionReader(OrganizationsDbContext dbContext)
@@ -12,7 +13,8 @@ internal sealed class OrganizationAccessDecisionReader(OrganizationsDbContext db
         string subjectId,
         CancellationToken cancellationToken)
     {
-        string normalizedSubject = subjectId.Trim();
+        ArgumentOutOfRangeException.ThrowIfEqual(organizationId, Guid.Empty);
+        string normalizedSubject = NormalizeSubjectId(subjectId);
         var access = await (
             from organization in dbContext.Organizations.AsNoTracking()
             join membership in dbContext.Memberships.AsNoTracking()
@@ -55,16 +57,16 @@ internal sealed class OrganizationAccessDecisionReader(OrganizationsDbContext db
     {
         ArgumentOutOfRangeException.ThrowIfEqual(organizationId, Guid.Empty);
         ArgumentNullException.ThrowIfNull(candidateSubjectIds);
-        if (candidateSubjectIds.Count > IOrganizationAccessCandidateFilter.MaximumCandidateCount)
+        if (candidateSubjectIds.Count > OrganizationAccessContract.MaximumCandidateCount)
         {
             throw new ArgumentOutOfRangeException(
                 nameof(candidateSubjectIds),
                 candidateSubjectIds.Count,
-                $"At most {IOrganizationAccessCandidateFilter.MaximumCandidateCount} candidates are allowed.");
+                $"At most {OrganizationAccessContract.MaximumCandidateCount} candidates are allowed.");
         }
 
         string[] candidates = candidateSubjectIds
-            .Select(NormalizeCandidate)
+            .Select(NormalizeSubjectId)
             .Distinct(StringComparer.Ordinal)
             .Order(StringComparer.Ordinal)
             .ToArray();
@@ -88,10 +90,10 @@ internal sealed class OrganizationAccessDecisionReader(OrganizationsDbContext db
             .ConfigureAwait(false);
     }
 
-    private static string NormalizeCandidate(string candidate)
+    private static string NormalizeSubjectId(string candidate)
     {
         string normalized = candidate?.Trim() ?? string.Empty;
-        return normalized.Length is >= 1 and <= 160 &&
+        return normalized.Length is >= 1 and <= OrganizationSubjectId.MaxLength &&
                normalized.All(character => !char.IsWhiteSpace(character) && !char.IsControl(character))
             ? normalized
             : throw new ArgumentException("Candidate subject ids must be valid organization subject ids.", nameof(candidate));

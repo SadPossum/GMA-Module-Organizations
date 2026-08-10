@@ -20,6 +20,8 @@ using ContractEnrollmentClaimDto =
     Gma.Modules.Organizations.Contracts.OrganizationEnrollmentClaimDto;
 using ContractEnrollmentClaimStatus =
     Gma.Modules.Organizations.Contracts.OrganizationEnrollmentClaimStatus;
+using OrganizationAccessDecision =
+    Gma.Modules.Organizations.Contracts.OrganizationAccessDecision;
 
 [Trait("Category", "Docker")]
 [Trait("Category", "Integration")]
