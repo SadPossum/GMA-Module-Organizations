@@ -1,6 +1,5 @@
 namespace Gma.Modules.Organizations.Persistence.Repositories;
 
-using Gma.Framework.Persistence.EntityFrameworkCore;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Microsoft.EntityFrameworkCore;
@@ -12,9 +11,9 @@ internal sealed class OrganizationCreationCoordinator(
         Guid operationId,
         CancellationToken cancellationToken)
     {
-        await EfTransactionKeyLock.AcquireAsync(
+        await OrganizationScopeExistenceTransactionLock.AcquireAsync(
             dbContext,
-            $"gma:organizations:create:{operationId:N}",
+            operationId,
             cancellationToken).ConfigureAwait(false);
         Organization? organization = await dbContext.Organizations
             .SingleOrDefaultAsync(

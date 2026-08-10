@@ -39,7 +39,11 @@ identity and remains responsible for the surrounding workflow.
 4. The caller owns a non-empty `OrganizationId` for the logical provisioning
    attempt. Organizations uses it as the immutable organization and scope id
    and serializes concurrent attempts with the existing provider-neutral
-   transaction lock.
+   transaction lock. Scope destruction acquires that same per-organization
+   exclusive lock before reading or closing the scope. A waiting provisioning
+   replay observes committed closure, while destruction cannot overlap a
+   transaction that is still creating or replaying the same identity.
+   Unrelated organization ids remain independent.
 5. A fresh valid attempt creates the organization, initial owner membership,
    scope state, events, and outbox records atomically. It returns `Provisioned`
    with the committed organization and membership summary.
@@ -56,6 +60,9 @@ identity and remains responsible for the surrounding workflow.
    the self-service fingerprint namespace, encountering creation state that
    cannot prove the same request, or attempting to reuse a destroyed scope
    returns `IdentityConflict`. The module never resurrects a scope tombstone.
+   If destruction wins the transaction lock, a waiting replay re-reads the
+   committed tombstone and returns that conflict. If replay wins, destruction
+   waits for its transaction to finish before it closes the scope.
 9. An exact trusted retry requires the original owner's membership to still
    exist, but it may return that membership in its current inactive state. The
    replay does not reactivate, restore, promote, or otherwise repair membership.
@@ -143,9 +150,13 @@ authorization or audit record.
 - The complete solution builds with zero warnings and zero errors.
 - SQL Server and PostgreSQL report no pending model changes.
 - All 329 unit and contract tests pass.
-- All 15 Docker integration tests pass against PostgreSQL, including exact,
-  divergent, same-slug, cross-channel, inactive-membership, live-row closure,
-  tombstone, and no-duplicate-outbox provisioning cases.
+- All 16 Docker integration tests pass across the PostgreSQL and SQL Server
+  provider lanes. PostgreSQL coverage includes exact, divergent, same-slug,
+  cross-channel, inactive-membership, live-row closure, tombstone,
+  no-duplicate-outbox, both replay-versus-destruction lock orders, and
+  unrelated-organization isolation cases. It also proves that a fresh creation
+  winning the lock makes a stale empty-scope destruction return typed `Stale`
+  without closing or deleting the new scope.
 - The transitive package vulnerability scan reports no vulnerable packages.
 
 ## Not In This Slice

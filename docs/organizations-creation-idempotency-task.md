@@ -43,7 +43,10 @@ or response caching.
 2. Name, slug, subject id, and actor id are validated and normalized before an
    operation can bind.
 3. The command acquires a provider-neutral exclusive transaction-key lock for
-   the creation operation before checking existing state or writing.
+   the creation operation before checking existing state or writing. Scope
+   destruction reuses the same stable per-organization lock resource before
+   any lifecycle read or close, preserving coordination with older creation
+   nodes during a rolling upgrade.
 4. A new valid attempt evaluates self-service/product admission, verifies slug
    availability, and commits the organization, initial owner membership,
    immutable creation fingerprint, scope state, events, and outbox atomically.
@@ -57,7 +60,10 @@ or response caching.
 8. Slug conflicts belonging to another operation retain the existing stable
    slug-conflict response.
 9. Scope destruction remains an anti-resurrection barrier because the
-   operation id and organization scope id are the same.
+   operation id and organization scope id are the same. Concurrent replay and
+   destruction serialize on that identity. A replay that follows closure must
+   re-read the tombstone; destruction cannot overlap a transaction that is
+   still creating or replaying the same identity.
 10. Browser callers preserve operation identity while normalized name and slug
     are unchanged, rotate it when intent changes, and clear it after a known
     successful response.
