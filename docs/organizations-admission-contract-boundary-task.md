@@ -1,7 +1,8 @@
 # Organizations Admission Contract Boundary Task
 
-Status: in progress
+Status: complete
 Date: 2026-08-09
+Completed: 2026-08-10
 
 ## Goal
 
@@ -83,7 +84,7 @@ to compose safely.
   tighten its boundary guard.
 - [x] Move BunkFy Workspaces to a Contracts-only creation policy and add a
   product architecture guard.
-- [ ] Run one consolidated non-Docker gate per changed repository at the
+- [x] Run one consolidated non-Docker gate per changed repository at the
   completed slice boundary, publish exact pins, and verify CI.
 
 ## Verification Plan
@@ -104,6 +105,32 @@ to compose safely.
 - GMA Auth-Organizations boundary guard and focused tests passed: 4.
 - BunkFy Workspaces focused tests passed: 83; its Contracts-only architecture
   test passed: 1.
+
+## Closure Evidence
+
+- Organizations `404a4a2a28a26113a0f121b98b17660b1ac11f4f` passed its
+  boundary guard, zero-warning build, PostgreSQL and SQL Server migration-drift
+  checks, 310 unit tests, package audit, Validate run `31343879317`, and
+  Security Baseline run `31343879393`.
+- GMA Extensions `0c22082d9ad20fcecb56cb9c3e895a3339aa9d34` passed solution
+  synchronization, its boundary guard, zero-warning build, all 30 tests,
+  package audit, Validate run `31343893316`, and Security Baseline run
+  `31343893323`.
+- GMA Skeleton `50e33a5510d50b91ee41a12202476c785112b2f5` passed source and
+  generated-selection synchronization, security and release guards,
+  zero-warning build, migration-drift checks, all non-Docker tests, Validate
+  run `31344166667`, CodeQL run `31344166682`, and Security Baseline run
+  `31344166651`.
+- BunkFy Backend `c99d34e1be5e94e7ce839b17112123a17ea027be` passed workspace
+  synchronization, source-package checks, zero-warning build, all migration
+  drift checks, the complete non-Docker suite, Validate run `31344199612`, and
+  Security Baseline run `31344199606`.
+- BunkFy root `6cb914587ea683c07593f2777b50e962ce3d10b3` passed exact-pointer,
+  workspace, operational-flow, and production-admission guards, Validate run
+  `31344498276`, CodeQL run `31344498274`, and Security Baseline run
+  `31344498277`.
+- No Docker/provider gate was run because this slice changed no persistence
+  model, migration, provider behavior, or transaction boundary.
 
 ## Not In This Slice
 
