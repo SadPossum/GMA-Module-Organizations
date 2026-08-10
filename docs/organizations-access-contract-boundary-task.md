@@ -1,7 +1,8 @@
 # Organizations Access Contract Boundary Task
 
-Status: in progress
+Status: complete
 Date: 2026-08-10
+Completed: 2026-08-10
 
 ## Goal
 
@@ -79,8 +80,8 @@ sound and require no persistence-model change.
   unavailability, exception, cancellation, bypass, and privacy behavior.
 - [x] Move BunkFy Operations Notifications to Contracts only and add a scoped
   architecture guard.
-- [ ] Update canonical Skeleton and product pins after focused verification.
-- [ ] Run one consolidated non-Docker gate per changed repository at the
+- [x] Update canonical Skeleton and product pins after focused verification.
+- [x] Run one consolidated non-Docker gate per changed repository at the
   completed slice boundary, publish exact pins, and verify exact CI.
 
 ## Verification Plan
@@ -104,6 +105,36 @@ sound and require no persistence-model change.
 - BunkFy Operations Notifications passed all 100 focused tests, including
   bounded batches and propagated authority failure; its Contracts-only
   architecture guard and Worker composition test each passed.
+
+## Closure Evidence
+
+- Organizations `0bddb6c2569cd8a4a2c26fab0265007b788058b5` passed the
+  consolidated non-Docker verifier with solution synchronization, a
+  zero-warning build, PostgreSQL and SQL Server migration drift checks, 313
+  tests, and package audit. Exact GitHub runs `31348014245` (Validate) and
+  `31348014259` (Security Baseline) passed.
+- GMA Extensions `557ab7dd946304988d247fc597ba433b81053128` passed its
+  CI-equivalent non-Docker gate with solution synchronization, boundary
+  checks, a zero-warning build, 37 tests, and package audit. Exact GitHub runs
+  `31347838376` (Validate) and `31347838355` (Security Baseline) passed.
+- GMA Skeleton `7455a86ec4b516e7392d3fb91d34825caf86352c` passed its
+  consolidated non-Docker verifier, including composed build, migration drift,
+  module, architecture, integration, and release guards. Exact GitHub runs
+  `31348277608` (Validate), `31348277626` (CodeQL), and `31348277623`
+  (Security Baseline) passed.
+- BunkFy Backend `34b3a08da07074535d3dce86569efc9f917c12a6` passed its
+  consolidated non-Docker verifier with a zero-warning build, migration drift,
+  all module and extension suites, 96 architecture tests, and 54 integration
+  tests. Exact GitHub runs `31349391813` (Validate) and `31349391852`
+  (Security Baseline) passed.
+- BunkFy `ceb49fc722aef8ae97d174eb5e3922205b78d40e` passed the root
+  lightweight composition, security, release, recovery, and deployed-probe
+  policy gate. Exact GitHub runs `31350036266` (Validate), `31350036263`
+  (CodeQL), and `31350036264` (Security Baseline) passed.
+- No local Docker/provider gate was run because this slice changed no SQL query
+  shape, persistence model, migration, transaction boundary, or provider
+  behavior. Migration drift and the complete non-Docker composition gates were
+  retained at the slice boundary.
 
 ## Not In This Slice
 
