@@ -30,10 +30,10 @@ Auth, Tenancy, Access Control, Notifications, Files, Task Runtime, and product
 modules remain separate owners. Closing Organizations must not delete their
 state or infer their identifiers.
 
-## Application Boundary
+## Contract Boundary
 
-Expose `IOrganizationScopeLifecycle` from the Application package. It has no
-HTTP or administration route and offers only:
+Expose `IOrganizationScopeLifecycle` from the Contracts package. It has no HTTP
+or administration route and offers only:
 
 1. an exact scope snapshot;
 2. keyset-paged typed export against one expected revision; and
@@ -41,6 +41,11 @@ HTTP or administration route and offers only:
 
 The organization id is the scope key. The facade does not require Auth,
 Tenancy, ambient HTTP scope, or a product callback.
+
+The facade was originally introduced as an Application port. The
+[scope lifecycle contract boundary task](organizations-scope-lifecycle-contract-boundary-task.md)
+moves the product-neutral cross-module capability to Contracts after product
+consumers proved the boundary.
 
 ## Export
 

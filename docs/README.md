@@ -99,6 +99,8 @@ The exact enrollment-claim reconciliation contract is tracked in
 
 The product-neutral complete-scope export and destruction facade is tracked in
 [Organizations Scope Lifecycle Task](organizations-scope-lifecycle-task.md).
+Its cross-module Contracts placement is tracked in
+[Organizations Scope Lifecycle Contract Boundary Task](organizations-scope-lifecycle-contract-boundary-task.md).
 
 ## Owned behavior
 

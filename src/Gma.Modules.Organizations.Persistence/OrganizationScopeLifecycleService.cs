@@ -1,7 +1,7 @@
 namespace Gma.Modules.Organizations.Persistence;
 
 using Gma.Framework.Runtime.Time;
-using Gma.Modules.Organizations.Application.Ports;
+using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Microsoft.EntityFrameworkCore;
 

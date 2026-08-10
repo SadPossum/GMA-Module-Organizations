@@ -2,7 +2,7 @@ namespace Gma.Modules.Organizations.Tests.Persistence;
 
 using Gma.Framework.Messaging.Infrastructure;
 using Gma.Framework.Runtime.Time;
-using Gma.Modules.Organizations.Application.Ports;
+using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
 using Gma.Modules.Organizations.Persistence;
@@ -10,6 +10,10 @@ using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Diagnostics;
 using Microsoft.EntityFrameworkCore.Storage;
 using Xunit;
+using DomainEnrollmentApprovalMode =
+    Gma.Modules.Organizations.Domain.Enums.OrganizationEnrollmentApprovalMode;
+using DomainMembershipRole =
+    Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipRole;
 
 [Trait("Category", "Unit")]
 public sealed class OrganizationScopeLifecycleTests
@@ -27,12 +31,12 @@ public sealed class OrganizationScopeLifecycleTests
             Id(2),
             organizationId,
             "subject-a",
-            OrganizationMembershipRole.Owner);
+            DomainMembershipRole.Owner);
         OrganizationMembership secondMembership = CreateMembership(
             Id(3),
             organizationId,
             "subject-b",
-            OrganizationMembershipRole.Member);
+            DomainMembershipRole.Member);
         OrganizationInvitation invitation = CreateInvitation(
             Id(4),
             organizationId,
@@ -143,7 +147,7 @@ public sealed class OrganizationScopeLifecycleTests
             Id(7),
             organizationId,
             "subject-c",
-            OrganizationMembershipRole.Member));
+            DomainMembershipRole.Member));
         await dbContext.SaveChangesAsync();
         OrganizationScopeExportPage stale = await service.ExportAsync(
             Request(
@@ -165,7 +169,7 @@ public sealed class OrganizationScopeLifecycleTests
             Id(21),
             organizationId,
             "subject-a",
-            OrganizationMembershipRole.Owner);
+            DomainMembershipRole.Owner);
         OrganizationEnrollmentLink link = CreateLink(Id(22), organizationId);
         OrganizationEnrollmentClaim claim = CreateClaim(
             Id(23),
@@ -238,7 +242,7 @@ public sealed class OrganizationScopeLifecycleTests
             Id(28),
             organizationId,
             "late-subject",
-            OrganizationMembershipRole.Member));
+            DomainMembershipRole.Member));
         await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
             dbContext.SaveChangesAsync());
     }
@@ -316,7 +320,7 @@ public sealed class OrganizationScopeLifecycleTests
         Guid id,
         Guid organizationId,
         string subjectId,
-        OrganizationMembershipRole role) =>
+        DomainMembershipRole role) =>
         OrganizationMembership.Create(
             id,
             organizationId,
@@ -356,7 +360,7 @@ public sealed class OrganizationScopeLifecycleTests
             new string('b', 64),
             Now.AddDays(7),
             maximumClaims: 10,
-            OrganizationEnrollmentApprovalMode.RequiresApproval,
+            DomainEnrollmentApprovalMode.RequiresApproval,
             "user:owner",
             Guid.NewGuid(),
             Now,

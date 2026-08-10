@@ -1,7 +1,7 @@
 namespace Gma.Modules.Organizations.Persistence;
 
 using Gma.Modules.Organizations.Application.Mapping;
-using Gma.Modules.Organizations.Application.Ports;
+using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 
 internal sealed partial class OrganizationScopeLifecycleService

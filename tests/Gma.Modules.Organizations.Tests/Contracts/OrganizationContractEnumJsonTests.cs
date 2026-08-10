@@ -13,6 +13,11 @@ public sealed class OrganizationContractEnumJsonTests
         new()
         {
             { typeof(OrganizationAccessDecision), OrganizationAccessDecision.MembershipInactive, "membership-inactive" },
+            { typeof(OrganizationScopeStatus), OrganizationScopeStatus.Closed, "closed" },
+            { typeof(OrganizationScopeExportStatus), OrganizationScopeExportStatus.Stale, "stale" },
+            { typeof(OrganizationScopeExportStore), OrganizationScopeExportStore.EnrollmentClaims, "enrollment-claims" },
+            { typeof(OrganizationScopeDestroyStatus), OrganizationScopeDestroyStatus.InProgress, "in-progress" },
+            { typeof(OrganizationScopeDestructionStage), OrganizationScopeDestructionStage.OutboxMessages, "outbox-messages" },
             { typeof(OrganizationCreationAdmissionDecision), OrganizationCreationAdmissionDecision.SubjectVerificationRequired, "subject-verification-required" },
             { typeof(OrganizationInvitationRecipientVerificationDecision), OrganizationInvitationRecipientVerificationDecision.NotVerified, "not-verified" },
             { typeof(OrganizationJoinAdmissionOperation), OrganizationJoinAdmissionOperation.ApproveEnrollment, "approve-enrollment" },

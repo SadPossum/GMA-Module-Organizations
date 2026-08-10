@@ -5,12 +5,12 @@ using System.Globalization;
 using System.Security.Cryptography;
 using System.Text;
 using Gma.Framework.Messaging.Infrastructure;
-using Gma.Modules.Organizations.Application.Ports;
+using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
 using ContractDestroyReceipt =
-    Application.Ports.OrganizationScopeDestroyReceipt;
+    Contracts.OrganizationScopeDestroyReceipt;
 using DomainDestroyOperation =
     Domain.Entities.OrganizationScopeDestroyOperation;
 using DomainDestroyReceipt = Domain.Entities.OrganizationScopeDestroyReceipt;

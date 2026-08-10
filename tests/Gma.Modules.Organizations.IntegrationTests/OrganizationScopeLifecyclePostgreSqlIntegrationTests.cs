@@ -4,7 +4,7 @@ using Gma.Framework.Messaging;
 using Gma.Framework.Messaging.Infrastructure;
 using Gma.Framework.Runtime.Identity;
 using Gma.Framework.Runtime.Time;
-using Gma.Modules.Organizations.Application.Ports;
+using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
 using Gma.Modules.Organizations.IntegrationTests.Support;
@@ -16,6 +16,10 @@ using Microsoft.Extensions.Options;
 using Npgsql;
 using Testcontainers.PostgreSql;
 using Xunit;
+using DomainEnrollmentApprovalMode =
+    Gma.Modules.Organizations.Domain.Enums.OrganizationEnrollmentApprovalMode;
+using DomainMembershipRole =
+    Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipRole;
 
 [Trait("Category", "Docker")]
 [Trait("Category", "Integration")]
@@ -146,12 +150,12 @@ public sealed class OrganizationScopeLifecyclePostgreSqlIntegrationTests
             Id(3),
             organizationId,
             "owner",
-            OrganizationMembershipRole.Owner);
+            DomainMembershipRole.Owner);
         OrganizationMembership member = CreateMembership(
             Id(4),
             organizationId,
             "member",
-            OrganizationMembershipRole.Member);
+            DomainMembershipRole.Member);
         OrganizationInvitation invitation = OrganizationInvitation.Create(
             Id(5),
             organizationId,
@@ -185,7 +189,7 @@ public sealed class OrganizationScopeLifecyclePostgreSqlIntegrationTests
             new string('c', 64),
             Now.AddDays(7),
             maximumClaims: 10,
-            OrganizationEnrollmentApprovalMode.RequiresApproval,
+            DomainEnrollmentApprovalMode.RequiresApproval,
             "user:owner",
             Id(11),
             Now).Value;
@@ -469,7 +473,7 @@ public sealed class OrganizationScopeLifecyclePostgreSqlIntegrationTests
                 Id(83),
                 seeded.OrganizationId,
                 "late-subject",
-                OrganizationMembershipRole.Member));
+                DomainMembershipRole.Member));
             await Assert.ThrowsAnyAsync<InvalidOperationException>(() =>
                 writeContext.SaveChangesAsync());
         }
@@ -560,7 +564,7 @@ public sealed class OrganizationScopeLifecyclePostgreSqlIntegrationTests
         Guid id,
         Guid organizationId,
         string subjectId,
-        OrganizationMembershipRole role) =>
+        DomainMembershipRole role) =>
         OrganizationMembership.Create(
             id,
             organizationId,

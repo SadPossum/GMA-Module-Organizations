@@ -4,7 +4,7 @@ using Gma.Modules.Organizations.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Metadata.Builders;
 using LifecycleLimits =
-    Gma.Modules.Organizations.Application.Ports.OrganizationScopeLifecycleLimits;
+    Gma.Modules.Organizations.Contracts.OrganizationScopeLifecycleLimits;
 
 internal sealed class OrganizationScopeDestroyReceiptConfiguration
     : IEntityTypeConfiguration<OrganizationScopeDestroyReceipt>
