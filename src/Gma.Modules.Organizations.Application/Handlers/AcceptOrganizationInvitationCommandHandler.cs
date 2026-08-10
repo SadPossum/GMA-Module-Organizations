@@ -19,7 +19,7 @@ internal sealed class AcceptOrganizationInvitationCommandHandler(
     IOrganizationGovernanceCoordinator governance,
     IOrganizationJoinSubjectCoordinator joinSubjects,
     IOrganizationInvitationTokenService tokens,
-    IOrganizationInvitationAdmissionPolicy admissionPolicy,
+    OrganizationInvitationRecipientVerification recipientVerification,
     OrganizationJoinAdmissionPolicy joinAdmissionPolicy,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>
@@ -103,11 +103,20 @@ internal sealed class AcceptOrganizationInvitationCommandHandler(
             return Result.Failure<OrganizationInvitationAcceptanceDto>(acceptable.Error);
         }
 
-        Result admission = await admissionPolicy.CanAcceptInvitationAsync(
-            subject.Value.Value, invitation.RecipientEmail, cancellationToken).ConfigureAwait(false);
-        if (admission.IsFailure)
+        if (invitation.RecipientEmail is not null)
         {
-            return Result.Failure<OrganizationInvitationAcceptanceDto>(admission.Error);
+            Result verification = await recipientVerification.VerifyAsync(
+                new OrganizationInvitationRecipientVerificationRequest(
+                    organization.Id,
+                    invitation.Id,
+                    subject.Value.Value,
+                    invitation.RecipientEmail),
+                cancellationToken).ConfigureAwait(false);
+            if (verification.IsFailure)
+            {
+                return Result.Failure<OrganizationInvitationAcceptanceDto>(
+                    verification.Error);
+            }
         }
 
         Result productAdmission = await joinAdmissionPolicy.AuthorizeAsync(

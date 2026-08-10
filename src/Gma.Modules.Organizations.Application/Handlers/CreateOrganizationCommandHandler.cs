@@ -6,6 +6,7 @@ using Gma.Framework.Runtime.Identity;
 using Gma.Framework.Runtime.Time;
 using Gma.Modules.Organizations.Application.Commands;
 using Gma.Modules.Organizations.Application.Mapping;
+using Gma.Modules.Organizations.Application.Policies;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Aggregates;
@@ -16,7 +17,7 @@ using DomainMembershipRole = Gma.Modules.Organizations.Domain.Enums.Organization
 internal sealed class CreateOrganizationCommandHandler(
     IOrganizationRepository organizations,
     IOrganizationCreationCoordinator creation,
-    IOrganizationAdmissionPolicy admissionPolicy,
+    OrganizationCreationAdmissionPolicy admissionPolicy,
     ISystemClock clock,
     IIdGenerator ids) : ICommandHandler<CreateOrganizationCommand, OrganizationMembershipSummaryDto>
 {
@@ -74,10 +75,14 @@ internal sealed class CreateOrganizationCommandHandler(
                     OrganizationApplicationErrors.CreationOperationConflict);
         }
 
-        Result admission = await admissionPolicy
-            .CanCreateOrganizationAsync(
+        Result admission = await admissionPolicy.AuthorizeAsync(
+            new OrganizationCreationAdmissionRequest(
+                command.OperationId,
+                name.Value.Value,
+                slug.Value.Value,
                 subject.Value.Value,
-                cancellationToken).ConfigureAwait(false);
+                actor.Value.Value),
+            cancellationToken).ConfigureAwait(false);
         if (admission.IsFailure)
         {
             return Failure(admission.Error);

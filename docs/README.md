@@ -36,6 +36,9 @@ The reusable host policy seam for owner-facing membership changes is tracked in
 [Organizations Membership Change Policy Task](organizations-membership-change-policy-task.md).
 Truthful denial and temporary-availability behavior for that seam is tracked in
 [Organizations Membership-Change Availability Task](organizations-membership-change-availability-task.md).
+Typed Contracts boundaries and truthful availability for organization creation
+and invitation recipient verification are tracked in
+[Organizations Admission Contract Boundary Task](organizations-admission-contract-boundary-task.md).
 The reusable admission seam for organization and join-source mutations is
 tracked in
 [Organizations Mutation Admission Policy Task](organizations-mutation-admission-policy-task.md).
@@ -149,7 +152,10 @@ The administration surface lives under `/api/admin/organizations` and uses globa
 }
 ```
 
-Recipient-bound invitations fail closed unless a host or extension replaces `IOrganizationInvitationAdmissionPolicy` with verified-email logic. Unbound invitations and enrollment links never create owners.
+Recipient-bound invitations fail closed unless at least one host or extension
+`IOrganizationInvitationRecipientVerificationPolicy` proves recipient
+ownership. Verifiers compose additively through Organizations Contracts;
+unbound invitations and enrollment links never create owners.
 
 Product admission policies return `Allowed`, `Denied`, or `Unavailable`.
 Deliberate denial is a state conflict; unavailable or invalid policy state and

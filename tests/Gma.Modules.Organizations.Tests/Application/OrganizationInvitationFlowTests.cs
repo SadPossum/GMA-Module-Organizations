@@ -301,6 +301,129 @@ public sealed class OrganizationInvitationFlowTests
     }
 
     [Fact]
+    public async Task Unbound_invitation_does_not_invoke_recipient_verifiers()
+    {
+        TestRepository repository = CreateRepository();
+        TestClock clock = new();
+        RecordingRecipientVerificationPolicy policy = new()
+        {
+            Decision = OrganizationInvitationRecipientVerificationDecision.Unavailable
+        };
+        using ServiceProvider services = CreateServices(
+            repository,
+            clock,
+            recipientVerificationPolicy: policy);
+        var accept = services.GetRequiredService<
+            ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationInvitationIssuedDto issued = await IssueAsync(
+            services,
+            organization,
+            null,
+            24);
+
+        var result = await accept.HandleAsync(
+            new AcceptOrganizationInvitationCommand(
+                issued.Token,
+                "member",
+                "user:member"),
+            CancellationToken.None);
+
+        Assert.True(result.IsSuccess, result.Error.Code);
+        Assert.Empty(policy.Requests);
+    }
+
+    [Fact]
+    public async Task Recipient_verification_unavailability_mutates_no_join_state()
+    {
+        TestRepository repository = CreateRepository();
+        TestClock clock = new();
+        RecordingRecipientVerificationPolicy policy = new()
+        {
+            Decision = OrganizationInvitationRecipientVerificationDecision.Unavailable
+        };
+        using ServiceProvider services = CreateServices(
+            repository,
+            clock,
+            recipientVerificationPolicy: policy);
+        var accept = services.GetRequiredService<
+            ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationInvitationIssuedDto issued = await IssueAsync(
+            services,
+            organization,
+            "member@example.com",
+            24);
+        OrganizationInvitation invitation = Assert.Single(repository.Invitations);
+        long invitationVersion = invitation.Version;
+        int invitationEventCount = invitation.DomainEvents.Count;
+
+        var result = await accept.HandleAsync(
+            new AcceptOrganizationInvitationCommand(
+                issued.Token,
+                "member",
+                "user:member"),
+            CancellationToken.None);
+
+        Assert.Equal(
+            OrganizationApplicationErrors.RecipientVerificationUnavailable,
+            result.Error);
+        Assert.DoesNotContain(
+            repository.Memberships,
+            membership => membership.SubjectId == "member");
+        Assert.Null(invitation.AcceptedSubjectId);
+        Assert.Equal(invitationVersion, invitation.Version);
+        Assert.Equal(invitationEventCount, invitation.DomainEvents.Count);
+        OrganizationInvitationRecipientVerificationRequest request =
+            Assert.Single(policy.Requests);
+        Assert.Equal(organization.Id, request.OrganizationId);
+        Assert.Equal(issued.Invitation.InvitationId, request.InvitationId);
+        Assert.Equal("member", request.SubjectId);
+        Assert.Equal("member@example.com", request.RecipientEmail);
+    }
+
+    [Fact]
+    public async Task Accepted_invitation_retry_does_not_reverify_recipient()
+    {
+        TestRepository repository = CreateRepository();
+        TestClock clock = new();
+        RecordingRecipientVerificationPolicy policy = new();
+        using ServiceProvider services = CreateServices(
+            repository,
+            clock,
+            recipientVerificationPolicy: policy);
+        var accept = services.GetRequiredService<
+            ICommandHandler<AcceptOrganizationInvitationCommand, OrganizationInvitationAcceptanceDto>>();
+        Organization organization = Assert.Single(repository.Organizations);
+        OrganizationInvitationIssuedDto issued = await IssueAsync(
+            services,
+            organization,
+            "member@example.com",
+            24);
+
+        var accepted = await accept.HandleAsync(
+            new AcceptOrganizationInvitationCommand(
+                issued.Token,
+                "member",
+                "user:member"),
+            CancellationToken.None);
+        policy.Decision = OrganizationInvitationRecipientVerificationDecision.Unavailable;
+        var replayed = await accept.HandleAsync(
+            new AcceptOrganizationInvitationCommand(
+                issued.Token,
+                "member",
+                "user:member"),
+            CancellationToken.None);
+
+        Assert.True(accepted.IsSuccess, accepted.Error.Code);
+        Assert.True(replayed.IsSuccess, replayed.Error.Code);
+        Assert.Single(policy.Requests);
+        Assert.Single(
+            repository.Memberships,
+            membership => membership.SubjectId == "member");
+    }
+
+    [Fact]
     public async Task Accepted_token_rejects_a_competing_subject()
     {
         TestRepository repository = CreateRepository();
@@ -492,7 +615,9 @@ public sealed class OrganizationInvitationFlowTests
         TestClock clock,
         IOrganizationJoinAdmissionPolicy? joinPolicy = null,
         IOrganizationJoinSourceAuthorizationPolicy?
-            joinSourceAuthorizationPolicy = null)
+            joinSourceAuthorizationPolicy = null,
+        IOrganizationInvitationRecipientVerificationPolicy?
+            recipientVerificationPolicy = null)
     {
         IConfiguration configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -513,6 +638,10 @@ public sealed class OrganizationInvitationFlowTests
         {
             services.AddSingleton(joinSourceAuthorizationPolicy);
         }
+        if (recipientVerificationPolicy is not null)
+        {
+            services.AddSingleton(recipientVerificationPolicy);
+        }
         services.AddSingleton<IOrganizationRepository>(repository);
         services.AddSingleton<IOrganizationJoinSourceIssuanceCoordinator>(
             new Gma.Modules.Organizations.Tests.Support.TestOrganizationJoinSourceIssuanceCoordinator(repository));
@@ -532,6 +661,23 @@ public sealed class OrganizationInvitationFlowTests
             CancellationToken cancellationToken = default)
         {
             this.Contexts.Add(context);
+            return ValueTask.FromResult(this.Decision);
+        }
+    }
+
+    private sealed class RecordingRecipientVerificationPolicy
+        : IOrganizationInvitationRecipientVerificationPolicy
+    {
+        public OrganizationInvitationRecipientVerificationDecision Decision { get; set; } =
+            OrganizationInvitationRecipientVerificationDecision.Verified;
+
+        public List<OrganizationInvitationRecipientVerificationRequest> Requests { get; } = [];
+
+        public ValueTask<OrganizationInvitationRecipientVerificationDecision> EvaluateAsync(
+            OrganizationInvitationRecipientVerificationRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            this.Requests.Add(request);
             return ValueTask.FromResult(this.Decision);
         }
     }

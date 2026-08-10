@@ -55,6 +55,31 @@ public sealed class OrganizationEndpointSupportTests
     }
 
     [Theory]
+    [InlineData("Organizations.CreationRejected", StatusCodes.Status403Forbidden)]
+    [InlineData("Organizations.CreationAdmissionUnavailable", StatusCodes.Status503ServiceUnavailable)]
+    [InlineData("Organizations.RecipientVerificationRequired", StatusCodes.Status403Forbidden)]
+    [InlineData("Organizations.RecipientVerificationUnavailable", StatusCodes.Status503ServiceUnavailable)]
+    public void Admission_failures_have_stable_http_statuses(
+        string errorCode,
+        int expectedStatusCode)
+    {
+        Error error = errorCode switch
+        {
+            "Organizations.CreationRejected" =>
+                OrganizationApplicationErrors.CreationRejected,
+            "Organizations.CreationAdmissionUnavailable" =>
+                OrganizationApplicationErrors.CreationAdmissionUnavailable,
+            "Organizations.RecipientVerificationRequired" =>
+                OrganizationApplicationErrors.RecipientVerificationRequired,
+            _ => OrganizationApplicationErrors.RecipientVerificationUnavailable
+        };
+
+        Assert.Equal(
+            expectedStatusCode,
+            OrganizationEndpointSupport.ErrorStatusCodes.GetStatusCode(error));
+    }
+
+    [Theory]
     [InlineData("Organizations.CreationOperationRequired", StatusCodes.Status400BadRequest)]
     [InlineData("Organizations.CreationOperationConflict", StatusCodes.Status409Conflict)]
     [InlineData("Organizations.MutationOperationRequired", StatusCodes.Status400BadRequest)]

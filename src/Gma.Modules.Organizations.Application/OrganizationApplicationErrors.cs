@@ -12,6 +12,8 @@ public static class OrganizationApplicationErrors
     public static readonly Error SlugConflict = new("Organizations.SlugConflict", "The organization slug is already in use.");
     public static readonly Error CreationOperationRequired = new("Organizations.CreationOperationRequired", "An organization creation operation id is required.");
     public static readonly Error CreationOperationConflict = new("Organizations.CreationOperationConflict", "The organization creation operation id is already bound to different inputs or an unavailable result.");
+    public static readonly Error CreationRejected = new("Organizations.CreationRejected", "Organization creation is not available for this subject.");
+    public static readonly Error CreationAdmissionUnavailable = new("Organizations.CreationAdmissionUnavailable", "Organization creation admission is temporarily unavailable.");
     public static readonly Error MembershipConflict = new("Organizations.MembershipConflict", "The subject already has an organization membership.");
     public static readonly Error MembershipChangeRejected = new("Organizations.MembershipChangeRejected", "The membership change is not available through this operation.");
     public static readonly Error MembershipChangeUnavailable = new("Organizations.MembershipChangeUnavailable", "Organization membership change is temporarily unavailable.");
@@ -23,6 +25,7 @@ public static class OrganizationApplicationErrors
     public static readonly Error InvitationTokenInvalid = new("Organizations.InvitationTokenInvalid", "The invitation token is invalid.");
     public static readonly Error InvitationLifetimeInvalid = new("Organizations.InvitationLifetimeInvalid", "The invitation lifetime is invalid.");
     public static readonly Error RecipientVerificationRequired = new("Organizations.RecipientVerificationRequired", "Verified recipient ownership is required to accept this invitation.");
+    public static readonly Error RecipientVerificationUnavailable = new("Organizations.RecipientVerificationUnavailable", "Invitation recipient verification is temporarily unavailable.");
     public static readonly Error EnrollmentLinkNotFound = new("Organizations.EnrollmentLinkNotFound", "The enrollment link was not found.");
     public static readonly Error EnrollmentTokenInvalid = new("Organizations.EnrollmentTokenInvalid", "The enrollment token is invalid.");
     public static readonly Error EnrollmentLifetimeInvalid = new("Organizations.EnrollmentLifetimeInvalid", "The enrollment-link lifetime is invalid.");

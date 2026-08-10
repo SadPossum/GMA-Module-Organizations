@@ -172,12 +172,52 @@ foreach ($handlerName in $classifiedHandlers) {
 
             $joinStateReadMatch = [regex]::Match(
                 $source,
-                'organizations\s*\.\s*(?:GetOrganizationAsync|GetMembershipAsync|HasCurrentPendingEnrollmentClaimAsync)|(?:admissionPolicy|joinAdmissionPolicy)\.(?:CanAcceptInvitationAsync|IsAllowedAsync)|OrganizationMemberProvisioning\.EnsureActiveMemberAsync')
+                'organizations\s*\.\s*(?:GetOrganizationAsync|GetMembershipAsync|HasCurrentPendingEnrollmentClaimAsync)|recipientVerification\.VerifyAsync|joinAdmissionPolicy\.AuthorizeAsync|OrganizationMemberProvisioning\.EnsureActiveMemberAsync')
             if ($joinStateReadMatch.Success -and
                 $joinSubjectMatch.Index -gt $joinStateReadMatch.Index) {
                 $errors.Add("$($handler.Name) reads join-subject state before acquiring its transaction lock.")
             }
         }
+    }
+}
+
+$creationHandler = $commandHandlers |
+    Where-Object BaseName -eq 'CreateOrganizationCommandHandler'
+if ($null -ne $creationHandler) {
+    $source = Get-Content -LiteralPath $creationHandler.FullName -Raw
+    $replay = [regex]::Match($source, 'if\s*\(existing is not null\)')
+    $admissions = [regex]::Matches($source, 'admissionPolicy\.AuthorizeAsync\(')
+    $slugCheck = [regex]::Match($source, 'organizations\.SlugExistsAsync\(')
+    $firstMutation = [regex]::Match($source, 'Organization\.Create\(')
+    if (-not $replay.Success -or $admissions.Count -ne 1 -or
+        -not $slugCheck.Success -or -not $firstMutation.Success -or
+        $replay.Index -gt $admissions[0].Index -or
+        $admissions[0].Index -gt $slugCheck.Index -or
+        $slugCheck.Index -gt $firstMutation.Index) {
+        $errors.Add('CreateOrganizationCommandHandler must preserve exact replay before one fresh admission, then slug validation before its first aggregate mutation.')
+    }
+}
+
+$invitationAcceptanceHandler = $commandHandlers |
+    Where-Object BaseName -eq 'AcceptOrganizationInvitationCommandHandler'
+if ($null -ne $invitationAcceptanceHandler) {
+    $source = Get-Content -LiteralPath $invitationAcceptanceHandler.FullName -Raw
+    $replay = [regex]::Match(
+        $source,
+        'invitation\.Status == OrganizationInvitationState\.Accepted')
+    $recipientVerifications = [regex]::Matches(
+        $source,
+        'recipientVerification\.VerifyAsync\(')
+    $productAdmissions = [regex]::Matches(
+        $source,
+        'joinAdmissionPolicy\.AuthorizeAsync\(')
+    $firstMutation = [regex]::Match($source, 'OrganizationMembership\.Create\(')
+    if (-not $replay.Success -or $recipientVerifications.Count -ne 1 -or
+        $productAdmissions.Count -ne 1 -or -not $firstMutation.Success -or
+        $replay.Index -gt $recipientVerifications[0].Index -or
+        $recipientVerifications[0].Index -gt $productAdmissions[0].Index -or
+        $productAdmissions[0].Index -gt $firstMutation.Index) {
+        $errors.Add('AcceptOrganizationInvitationCommandHandler must preserve exact replay before recipient verification, product admission, and its first membership mutation.')
     }
 }
 

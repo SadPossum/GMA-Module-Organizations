@@ -239,6 +239,82 @@ public sealed class CreateOrganizationHandlerTests
         Assert.Single(repository.Organizations);
     }
 
+    [Fact]
+    public async Task Product_policy_unavailability_does_not_bind_or_stage_creation()
+    {
+        Guid operationId = Guid.NewGuid();
+        TestRepository repository = new();
+        using (ServiceProvider unavailable = CreateServices(
+                   repository,
+                   enabled: true,
+                   admissionPolicy: new RecordingCreationPolicy
+                   {
+                       Decision = OrganizationCreationAdmissionDecision.Unavailable
+                   }))
+        {
+            var handler = unavailable.GetRequiredService<
+                ICommandHandler<
+                    CreateOrganizationCommand,
+                    OrganizationMembershipSummaryDto>>();
+
+            var result = await handler.HandleAsync(
+                CreateCommand(operationId),
+                CancellationToken.None);
+
+            Assert.Equal(
+                OrganizationApplicationErrors.CreationAdmissionUnavailable,
+                result.Error);
+            Assert.Empty(repository.Organizations);
+            Assert.Empty(repository.Memberships);
+        }
+
+        using ServiceProvider available = CreateServices(
+            repository,
+            enabled: true);
+        var retryHandler = available.GetRequiredService<
+            ICommandHandler<
+                CreateOrganizationCommand,
+                OrganizationMembershipSummaryDto>>();
+
+        var retried = await retryHandler.HandleAsync(
+            CreateCommand(operationId),
+            CancellationToken.None);
+
+        Assert.True(retried.IsSuccess, retried.Error.Code);
+        Assert.Single(repository.Organizations);
+        Assert.Single(repository.Memberships);
+    }
+
+    [Fact]
+    public async Task Exact_creation_retry_does_not_reapply_product_policy()
+    {
+        Guid operationId = Guid.NewGuid();
+        TestRepository repository = new();
+        RecordingCreationPolicy policy = new();
+        using ServiceProvider services = CreateServices(
+            repository,
+            enabled: true,
+            admissionPolicy: policy);
+        var handler = services.GetRequiredService<
+            ICommandHandler<
+                CreateOrganizationCommand,
+                OrganizationMembershipSummaryDto>>();
+
+        var created = await handler.HandleAsync(
+            CreateCommand(operationId),
+            CancellationToken.None);
+        policy.Decision = OrganizationCreationAdmissionDecision.Unavailable;
+        var replayed = await handler.HandleAsync(
+            CreateCommand(operationId),
+            CancellationToken.None);
+
+        Assert.True(created.IsSuccess, created.Error.Code);
+        Assert.True(replayed.IsSuccess, replayed.Error.Code);
+        Assert.Equal(1, policy.InvocationCount);
+        Assert.Single(repository.Organizations);
+        Assert.Single(repository.Memberships);
+    }
+
     private static CreateOrganizationCommand CreateCommand(Guid operationId) =>
         new(
             operationId,
@@ -247,7 +323,10 @@ public sealed class CreateOrganizationHandlerTests
             "subject-a",
             "user:subject-a");
 
-    private static ServiceProvider CreateServices(TestRepository repository, bool enabled)
+    private static ServiceProvider CreateServices(
+        TestRepository repository,
+        bool enabled,
+        IOrganizationCreationAdmissionPolicy? admissionPolicy = null)
     {
         IConfiguration configuration = new ConfigurationBuilder()
             .AddInMemoryCollection(new Dictionary<string, string?>
@@ -257,12 +336,32 @@ public sealed class CreateOrganizationHandlerTests
             .Build();
         ServiceCollection services = new();
         services.AddOrganizationsApplication(configuration);
+        if (admissionPolicy is not null)
+        {
+            services.AddSingleton(admissionPolicy);
+        }
         services.AddSingleton<IOrganizationRepository>(repository);
         services.AddSingleton<IOrganizationCreationCoordinator>(
             new TestCreationCoordinator(repository));
         services.AddSingleton<ISystemClock>(new TestClock());
         services.AddSingleton<IIdGenerator>(new TestIds());
         return services.BuildServiceProvider();
+    }
+
+    private sealed class RecordingCreationPolicy : IOrganizationCreationAdmissionPolicy
+    {
+        public OrganizationCreationAdmissionDecision Decision { get; set; } =
+            OrganizationCreationAdmissionDecision.Allowed;
+
+        public int InvocationCount { get; private set; }
+
+        public ValueTask<OrganizationCreationAdmissionDecision> EvaluateAsync(
+            OrganizationCreationAdmissionRequest request,
+            CancellationToken cancellationToken = default)
+        {
+            this.InvocationCount++;
+            return ValueTask.FromResult(this.Decision);
+        }
     }
 
     private sealed class TestRepository : IOrganizationRepository

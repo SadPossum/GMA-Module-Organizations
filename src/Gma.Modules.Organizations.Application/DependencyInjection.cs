@@ -29,8 +29,8 @@ public static class DependencyInjection
                 ServiceDescriptor.Singleton<IValidateOptions<OrganizationsOptions>, OrganizationsOptionsValidator>());
         }
 
-        services.TryAddScoped<IOrganizationAdmissionPolicy, DefaultOrganizationAdmissionPolicy>();
-        services.TryAddScoped<IOrganizationInvitationAdmissionPolicy, DefaultOrganizationInvitationAdmissionPolicy>();
+        services.TryAddScoped<OrganizationCreationAdmissionPolicy>();
+        services.TryAddScoped<OrganizationInvitationRecipientVerification>();
         services.TryAddScoped<OrganizationJoinAdmissionPolicy>();
         services.TryAddScoped<OrganizationMembershipChangePolicy>();
         services.TryAddScoped<OrganizationMutationAdmissionPolicy>();
