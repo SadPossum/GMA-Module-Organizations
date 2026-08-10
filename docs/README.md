@@ -4,6 +4,13 @@
 
 Organizations is intentionally independent from Auth, Tenancy, AccessControl, Notifications, and product modules. Authenticated subject ids are opaque strings. Cross-module activation, grant provisioning, and delivery behavior belongs in opt-in extensions.
 
+Trusted product orchestration may explicitly register the Contracts-only
+`IOrganizationProvisioner` to create one caller-identified organization and
+initial owner atomically. It is an in-process capability rather than a generic
+administration endpoint: callers own fresh authorization, provenance, durable
+product binding, recovery, and downstream operational readiness. Exact replay
+returns the current membership without silently repairing an inactive owner.
+
 Product orchestration may suspend, restore, or remove an exact ordinary membership through the Contracts-only `IOrganizationMembershipLifecycle`. The operation is idempotent, protects owner memberships, preserves normal optimistic concurrency and events, and reports stable no-op/not-found/protected outcomes. The facade owns no employment state, access-profile name, property plan, or product reason vocabulary.
 
 Composed products may register one or more
@@ -30,6 +37,8 @@ and do not intercept defensive source denial or administration recovery.
 Implementation direction and acceptance criteria are tracked in [Organizations Task](organizations-task.md).
 Retry-safe self-service creation is tracked in
 [Organizations Creation Idempotency Task](organizations-creation-idempotency-task.md).
+Trusted, opt-in product orchestration provisioning is tracked in
+[Organizations Platform Provisioning Contract Task](organizations-platform-provisioning-contract-task.md).
 The remaining production hardening work is tracked in
 [Organizations Production Hardening Task](organizations-production-hardening-task.md).
 The reusable host policy seam for owner-facing membership changes is tracked in

@@ -436,10 +436,14 @@ public sealed class CreateOrganizationHandlerTests
     private sealed class TestCreationCoordinator(TestRepository repository)
         : IOrganizationCreationCoordinator
     {
-        public Task<Organization?> AcquireAsync(
+        public async Task<OrganizationCreationAcquisition> AcquireAsync(
             Guid operationId,
             CancellationToken cancellationToken) =>
-            repository.GetOrganizationAsync(operationId, cancellationToken);
+            new(
+                await repository.GetOrganizationAsync(
+                    operationId,
+                    cancellationToken),
+                IsScopeClosed: false);
     }
 
     private sealed class TestIds : IIdGenerator

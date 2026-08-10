@@ -4,7 +4,11 @@ using Gma.Modules.Organizations.Domain.Aggregates;
 
 public interface IOrganizationCreationCoordinator
 {
-    Task<Organization?> AcquireAsync(
+    Task<OrganizationCreationAcquisition> AcquireAsync(
         Guid operationId,
         CancellationToken cancellationToken);
 }
+
+public sealed record OrganizationCreationAcquisition(
+    Organization? Organization,
+    bool IsScopeClosed);

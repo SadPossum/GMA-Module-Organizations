@@ -8,7 +8,7 @@ using Microsoft.EntityFrameworkCore;
 internal sealed class OrganizationCreationCoordinator(
     OrganizationsDbContext dbContext) : IOrganizationCreationCoordinator
 {
-    public async Task<Organization?> AcquireAsync(
+    public async Task<OrganizationCreationAcquisition> AcquireAsync(
         Guid operationId,
         CancellationToken cancellationToken)
     {
@@ -16,8 +16,18 @@ internal sealed class OrganizationCreationCoordinator(
             dbContext,
             $"gma:organizations:create:{operationId:N}",
             cancellationToken).ConfigureAwait(false);
-        return await dbContext.Organizations.SingleOrDefaultAsync(
+        Organization? organization = await dbContext.Organizations
+            .SingleOrDefaultAsync(
             organization => organization.Id == operationId,
             cancellationToken).ConfigureAwait(false);
+        bool isScopeClosed = await dbContext.OrganizationScopeStates
+            .AsNoTracking()
+            .AnyAsync(
+                state => state.OrganizationId == operationId &&
+                    state.IsClosed,
+                cancellationToken).ConfigureAwait(false);
+        return new OrganizationCreationAcquisition(
+            organization,
+            isScopeClosed);
     }
 }

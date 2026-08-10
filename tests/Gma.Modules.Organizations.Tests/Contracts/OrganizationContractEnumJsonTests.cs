@@ -30,6 +30,7 @@ public sealed class OrganizationContractEnumJsonTests
             { typeof(OrganizationJoinSourceIssuanceOutcome), OrganizationJoinSourceIssuanceOutcome.AlreadyIssued, "already-issued" },
             { typeof(OrganizationMembershipChangePolicyDecision), OrganizationMembershipChangePolicyDecision.Unavailable, "unavailable" },
             { typeof(OrganizationMembershipLifecycleOutcome), OrganizationMembershipLifecycleOutcome.AlreadyInDesiredState, "already-in-desired-state" },
+            { typeof(OrganizationProvisioningOutcome), OrganizationProvisioningOutcome.AlreadyProvisioned, "already-provisioned" },
             { typeof(OrganizationChange), OrganizationChange.OwnershipTransferred, "ownership-transferred" },
             { typeof(OrganizationEnrollmentApprovalMode), OrganizationEnrollmentApprovalMode.RequiresApproval, "requires-approval" },
             { typeof(OrganizationEnrollmentClaimChange), OrganizationEnrollmentClaimChange.Requested, "requested" },
