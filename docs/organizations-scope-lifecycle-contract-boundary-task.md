@@ -1,6 +1,6 @@
 # Organizations Scope Lifecycle Contract Boundary Task
 
-Status: in progress
+Status: complete
 Date: 2026-08-10
 
 ## Goal
@@ -67,8 +67,8 @@ protocol are otherwise well covered and do not need redesign in this slice.
   remove the Application port types.
 - [x] Move BunkFy Data Rights Organizations to Contracts only and add a scoped
   architecture guard.
-- [ ] Update canonical Skeleton and product pins after focused verification.
-- [ ] Run one consolidated non-Docker gate per changed repository at the
+- [x] Update canonical Skeleton and product pins after focused verification.
+- [x] Run one consolidated non-Docker gate per changed repository at the
   completed slice boundary, publish exact pins, and verify exact CI.
 
 ## Verification Plan
@@ -81,6 +81,35 @@ protocol are otherwise well covered and do not need redesign in this slice.
 - At the coherent slice boundary, run the complete non-Docker Organizations,
   Skeleton, and BunkFy backend gates once, plus the BunkFy root lightweight
   gate before publication.
+
+## Verification Evidence
+
+- Organizations functional commit
+  `248ff2f9c02e8115b4e49eb684e32ee9840605f4`: synchronized solution,
+  boundary checks, zero-warning build, PostgreSQL and SQL Server migration
+  drift checks, 323 unit tests, and package audit passed. Exact CI passed in
+  Validate run `31352707857` and Security Baseline run `31352707860`.
+- Canonical Skeleton pin commit
+  `f1b726c3c6f6bb123a1f6b3f742d8addee7dc4fd`: all ten mounted solutions,
+  selection matrices, security/release/source-package checks, zero-warning
+  build, migration drift checks, and non-Docker tests passed. Exact CI passed
+  in Validate run `31353150318`, Security Baseline run `31353150320`, and
+  CodeQL run `31353150301`.
+- BunkFy backend functional commit
+  `3ee7e226dea4d858ec98eadf7f9effae393aa66b`: complete non-Docker backend
+  verification passed, including Data Rights Organizations, Operations
+  Notifications, architecture, composition, integration, and migration drift
+  coverage. Exact CI passed in Validate run `31354373346` and Security
+  Baseline run `31354373383`.
+- BunkFy root pin commit
+  `462f93f2a9c75dd79f39f50d96220195aaff2f6a`: the lightweight root
+  composition, admission, and deployed-probe policy gate passed. Exact CI
+  passed in Validate run `31355065959`, Security Baseline run `31355065958`,
+  and CodeQL run `31355065951`.
+- Local Docker was intentionally omitted because the slice did not change a
+  persistence model, migration, generated SQL shape, transaction boundary,
+  provider mapping, or query behavior. Organizations CI still exercised its
+  PostgreSQL integration job on the exact functional commit.
 
 ## Not In This Slice
 
