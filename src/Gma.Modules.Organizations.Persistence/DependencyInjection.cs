@@ -78,6 +78,9 @@ public static class DependencyInjection
         builder.Services.TryAddScoped<IOrganizationAccessDecisionReader, OrganizationAccessDecisionReader>();
         builder.Services.TryAddScoped<IOrganizationAccessCandidateFilter, OrganizationAccessDecisionReader>();
         builder.Services.TryAddScoped<
+            IOrganizationMembershipInspector,
+            OrganizationMembershipInspector>();
+        builder.Services.TryAddScoped<
             IOrganizationEnrollmentClaimInspector,
             OrganizationEnrollmentClaimInspector>();
         builder.Services.TryAddScoped<IOrganizationRepository, OrganizationRepository>();
