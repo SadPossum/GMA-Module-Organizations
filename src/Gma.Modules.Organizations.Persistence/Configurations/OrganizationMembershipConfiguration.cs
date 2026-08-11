@@ -27,6 +27,7 @@ internal sealed class OrganizationMembershipConfiguration : IEntityTypeConfigura
         builder.Property(membership => membership.LastMutationKind)
             .HasConversion<int?>();
         builder.HasIndex(membership => new { membership.OrganizationId, membership.SubjectId }).IsUnique();
+        builder.HasIndex(membership => new { membership.OrganizationId, membership.Id });
         builder.HasIndex(membership => new { membership.SubjectId, membership.Status, membership.OrganizationId });
         builder.HasIndex(membership => new { membership.OrganizationId, membership.Status, membership.Role });
         builder.HasOne<Organization>()
