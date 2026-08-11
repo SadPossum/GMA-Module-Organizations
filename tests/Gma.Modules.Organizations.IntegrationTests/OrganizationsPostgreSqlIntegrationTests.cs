@@ -219,7 +219,7 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
             CreateDbContext(connectionString, commands);
         OrganizationInvitationInspector inspector = new(
             readerContext,
-            new FixedClock(expiresAtUtc));
+            new QueryCompletionClock(commands, expiresAtUtc));
 
         ContractInvitationStatus? found = await inspector.FindStatusAsync(
             organization.Id,
@@ -404,5 +404,19 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
     private sealed class FixedClock(DateTimeOffset utcNow) : Gma.Framework.Runtime.Time.ISystemClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
+    }
+
+    private sealed class QueryCompletionClock(
+        CountingCommandInterceptor commands,
+        DateTimeOffset utcNow) : Gma.Framework.Runtime.Time.ISystemClock
+    {
+        public DateTimeOffset UtcNow
+        {
+            get
+            {
+                Assert.Equal(1, commands.ReaderCommands);
+                return utcNow;
+            }
+        }
     }
 }

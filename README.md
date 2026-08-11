@@ -12,7 +12,9 @@ product cleanup policy.
 Composed modules may inspect only the effective status of one known invitation
 through `IOrganizationInvitationInspector`. The exact organization/invitation
 key returns `null` only when the retained row is missing and exposes no token,
-recipient, subject, or membership data.
+recipient, subject, or membership data. The result is a point-in-time lifecycle
+precondition; composed consumers still own their mutation serialization and
+authoritative reconciliation.
 
 Hosts may register `IOrganizationMutationAdmissionPolicy` implementations to
 admit, deny, or temporarily defer owner-facing organization and join-source

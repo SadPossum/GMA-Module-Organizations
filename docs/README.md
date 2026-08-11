@@ -22,7 +22,9 @@ read-only lookup rather than a claim search or public authorization surface.
 Composed modules that already know an organization and invitation may inspect
 only its effective status through the Contracts-only
 `IOrganizationInvitationInspector`. Pending rows at or past natural expiry are
-reported as expired; a missing or retention-removed row is `null`.
+reported as expired; a missing or retention-removed row is `null`. This is an
+unversioned point-in-time precondition rather than an atomic cross-module lock,
+so the composed consumer still owns serialization and reconciliation.
 
 The organization id is the immutable technical scope id. A mutable slug is only a routing and display aid. Membership proves belonging but grants no product permission by itself.
 

@@ -18,7 +18,6 @@ internal sealed class OrganizationInvitationInspector(
         ArgumentOutOfRangeException.ThrowIfEqual(organizationId, Guid.Empty);
         ArgumentOutOfRangeException.ThrowIfEqual(invitationId, Guid.Empty);
 
-        DateTimeOffset nowUtc = clock.UtcNow;
         InvitationStatusSnapshot? invitation = await dbContext.Invitations
             .AsNoTracking()
             .Where(candidate =>
@@ -30,6 +29,7 @@ internal sealed class OrganizationInvitationInspector(
             .SingleOrDefaultAsync(cancellationToken)
             .ConfigureAwait(false);
 
+        DateTimeOffset nowUtc = clock.UtcNow;
         return invitation is null
             ? null
             : OrganizationMappings.MapStatus(
