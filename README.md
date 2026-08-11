@@ -9,6 +9,11 @@ Composed modules may reconcile one known enrollment claim through
 returns retained authoritative claim state without exposing persistence or
 product cleanup policy.
 
+Composed modules may inspect only the effective status of one known invitation
+through `IOrganizationInvitationInspector`. The exact organization/invitation
+key returns `null` only when the retained row is missing and exposes no token,
+recipient, subject, or membership data.
+
 Hosts may register `IOrganizationMutationAdmissionPolicy` implementations to
 admit, deny, or temporarily defer owner-facing organization and join-source
 mutations before Organizations changes state. The seam is optional and contains

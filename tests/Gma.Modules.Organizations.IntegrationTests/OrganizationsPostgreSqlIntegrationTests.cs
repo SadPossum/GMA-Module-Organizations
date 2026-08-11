@@ -20,6 +20,8 @@ using ContractEnrollmentClaimDto =
     Gma.Modules.Organizations.Contracts.OrganizationEnrollmentClaimDto;
 using ContractEnrollmentClaimStatus =
     Gma.Modules.Organizations.Contracts.OrganizationEnrollmentClaimStatus;
+using ContractInvitationStatus =
+    Gma.Modules.Organizations.Contracts.OrganizationInvitationStatus;
 using OrganizationAccessDecision =
     Gma.Modules.Organizations.Contracts.OrganizationAccessDecision;
 
@@ -180,6 +182,50 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
         Assert.Equal(claim.Id, found.ClaimId);
         Assert.Equal(ContractEnrollmentClaimStatus.Pending, found.Status);
         Assert.Equal(claim.DecisionExpiresAtUtc, found.DecisionExpiresAtUtc);
+        Assert.Equal(1, commands.ReaderCommands);
+        Assert.Empty(readerContext.ChangeTracker.Entries());
+    }
+
+    [DockerFact]
+    public async Task Invitation_inspector_uses_one_exact_untracked_postgresql_query_and_effective_expiry()
+    {
+        await using PostgreSqlContainer postgreSql =
+            CreatePostgreSql("organizations_invitation_inspector_tests");
+        await postgreSql.StartAsync();
+        string connectionString = postgreSql.GetConnectionString();
+        Organization organization = CreateOrganization(
+            "Invitation House",
+            "invitation-house");
+        DateTimeOffset expiresAtUtc = Now.AddHours(1);
+        OrganizationInvitation invitation = OrganizationInvitation.Create(
+            Guid.NewGuid(),
+            organization.Id,
+            "owner",
+            recipientEmail: null,
+            new string('e', OrganizationInvitation.TokenDigestLength),
+            expiresAtUtc,
+            "user:owner",
+            Guid.NewGuid(),
+            Now).Value;
+        await using (OrganizationsDbContext seed = CreateDbContext(connectionString))
+        {
+            await seed.Database.MigrateAsync();
+            seed.AddRange(organization, invitation);
+            await seed.SaveChangesAsync();
+        }
+
+        CountingCommandInterceptor commands = new();
+        await using OrganizationsDbContext readerContext =
+            CreateDbContext(connectionString, commands);
+        OrganizationInvitationInspector inspector = new(
+            readerContext,
+            new FixedClock(expiresAtUtc));
+
+        ContractInvitationStatus? found = await inspector.FindStatusAsync(
+            organization.Id,
+            invitation.Id);
+
+        Assert.Equal(ContractInvitationStatus.Expired, found);
         Assert.Equal(1, commands.ReaderCommands);
         Assert.Empty(readerContext.ChangeTracker.Entries());
     }
