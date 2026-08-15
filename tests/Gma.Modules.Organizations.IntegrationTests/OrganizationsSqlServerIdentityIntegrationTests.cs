@@ -1,5 +1,7 @@
 namespace Gma.Modules.Organizations.IntegrationTests;
 
+using System.Data;
+using System.Data.Common;
 using Gma.Framework.Pagination;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Gma.Modules.Organizations.Domain.Enums;
@@ -28,6 +30,7 @@ public sealed class OrganizationsSqlServerIdentityIntegrationTests
         await using OrganizationsDbContext dbContext = CreateDbContext(
             sqlServer.GetConnectionString());
         await dbContext.Database.MigrateAsync();
+        await VerifyMembershipExportIndexAsync(dbContext);
 
         Organization organization = Organization.Create(
             Guid.NewGuid(),
@@ -137,6 +140,54 @@ public sealed class OrganizationsSqlServerIdentityIntegrationTests
             membership => membership.CreatedBy == "Actor-Case"));
         Assert.Equal(1, await dbContext.Memberships.CountAsync(
             membership => membership.CreatedBy == "actor-case"));
+    }
+
+    private static async Task VerifyMembershipExportIndexAsync(
+        OrganizationsDbContext dbContext)
+    {
+        DbConnection connection = dbContext.Database.GetDbConnection();
+        bool shouldClose = connection.State != ConnectionState.Open;
+        if (shouldClose)
+        {
+            await connection.OpenAsync();
+        }
+
+        try
+        {
+            await using DbCommand command = connection.CreateCommand();
+            command.CommandText = """
+                SELECT STRING_AGG(column_definition.name, ',')
+                    WITHIN GROUP (ORDER BY index_column.key_ordinal)
+                FROM sys.indexes AS index_definition
+                INNER JOIN sys.tables AS table_definition
+                    ON table_definition.object_id =
+                        index_definition.object_id
+                INNER JOIN sys.schemas AS schema_definition
+                    ON schema_definition.schema_id =
+                        table_definition.schema_id
+                INNER JOIN sys.index_columns AS index_column
+                    ON index_column.object_id = index_definition.object_id
+                    AND index_column.index_id = index_definition.index_id
+                    AND index_column.key_ordinal > 0
+                INNER JOIN sys.columns AS column_definition
+                    ON column_definition.object_id = index_column.object_id
+                    AND column_definition.column_id = index_column.column_id
+                WHERE schema_definition.name = 'organizations'
+                    AND table_definition.name = 'organization_memberships'
+                    AND index_definition.name =
+                        'IX_organization_memberships_OrganizationId_Id'
+                GROUP BY index_definition.name;
+                """;
+            string? columns = (string?)await command.ExecuteScalarAsync();
+            Assert.Equal("OrganizationId,Id", columns);
+        }
+        finally
+        {
+            if (shouldClose)
+            {
+                await connection.CloseAsync();
+            }
+        }
     }
 
     private static OrganizationEnrollmentClaim CreatePendingClaim(
