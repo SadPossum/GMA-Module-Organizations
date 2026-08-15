@@ -7,7 +7,7 @@ using Gma.Modules.Organizations.Contracts;
 using Xunit;
 
 [Trait("Category", "Unit")]
-[Collection(OrganizationsAdminCliConsoleIsolation.Name)]
+[Collection(ConsoleTestIsolation.Name)]
 public sealed class OrganizationsAdminCliOutputTests
 {
     [Fact]
@@ -82,7 +82,7 @@ public sealed class OrganizationsAdminCliOutputTests
 }
 
 [CollectionDefinition(Name, DisableParallelization = true)]
-public sealed class OrganizationsAdminCliConsoleIsolation
+public sealed class ConsoleTestIsolation
 {
-    public const string Name = "Organizations admin CLI console isolation";
+    public const string Name = "Console";
 }
