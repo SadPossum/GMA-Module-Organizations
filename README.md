@@ -9,6 +9,12 @@ Composed modules may reconcile one known enrollment claim through
 returns retained authoritative claim state without exposing persistence or
 product cleanup policy.
 
+Composed modules may reconcile one known membership event through
+`IOrganizationMembershipInspector`. The exact organization, membership, and
+subject lookup returns a minimal point-in-time lifecycle snapshot, including
+scope closure state, without becoming an authorization decision or mutation
+fence.
+
 Hosts may register `IOrganizationMutationAdmissionPolicy` implementations to
 admit, deny, or temporarily defer owner-facing organization and join-source
 mutations before Organizations changes state. The seam is optional and contains

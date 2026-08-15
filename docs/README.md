@@ -19,6 +19,12 @@ subject may reconcile the retained authoritative claim through the
 Contracts-only `IOrganizationEnrollmentClaimInspector`. It is an exact,
 read-only lookup rather than a claim search or public authorization surface.
 
+Composed modules that already know an organization, membership, and subject
+may reconcile current retained membership and scope state through the
+Contracts-only `IOrganizationMembershipInspector`. The result is a minimal
+point-in-time snapshot, not an authorization decision or an atomic mutation
+fence.
+
 The organization id is the immutable technical scope id. A mutable slug is only a routing and display aid. Membership proves belonging but grants no product permission by itself.
 
 Composed products may register one or more
@@ -96,6 +102,9 @@ pending join requests is tracked in
 
 The exact enrollment-claim reconciliation contract is tracked in
 [Organizations Enrollment Claim Inspection Task](organizations-enrollment-claim-inspection-task.md).
+
+The exact membership and scope-state reconciliation contract is tracked in
+[Organizations Membership Inspection Task](organizations-membership-inspection-task.md).
 
 The product-neutral complete-scope export and destruction facade is tracked in
 [Organizations Scope Lifecycle Task](organizations-scope-lifecycle-task.md).
