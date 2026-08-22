@@ -1,51 +1,105 @@
 namespace Gma.Modules.Organizations.Persistence.Access;
 
+using Gma.Modules.Organizations.Application.Mapping;
 using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Enums;
 using Gma.Modules.Organizations.Domain.ValueObjects;
 using Microsoft.EntityFrameworkCore;
+using DomainMembershipRole =
+    Gma.Modules.Organizations.Domain.Enums.OrganizationMembershipRole;
 
 internal sealed class OrganizationAccessDecisionReader(OrganizationsDbContext dbContext)
-    : IOrganizationAccessDecisionReader, IOrganizationAccessCandidateFilter
+    : IOrganizationAccessDecisionReader,
+      IOrganizationAccessCandidateFilter,
+      IOrganizationMembershipReader
 {
+    public async Task<OrganizationMembershipSnapshotDto?> FindAsync(
+        Guid organizationId,
+        string subjectId,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentOutOfRangeException.ThrowIfEqual(organizationId, Guid.Empty);
+        string normalizedSubject = NormalizeSubjectId(subjectId);
+        var row = await (
+                from organization in dbContext.Organizations.AsNoTracking()
+                join membership in dbContext.Memberships.AsNoTracking()
+                        .Where(candidate => candidate.SubjectId == normalizedSubject)
+                    on organization.Id equals membership.OrganizationId into memberships
+                from membership in memberships.DefaultIfEmpty()
+                where organization.Id == organizationId
+                select new
+                {
+                    OrganizationId = organization.Id,
+                    OrganizationStatus = organization.Status,
+                    MembershipId = membership == null ? (Guid?)null : membership.Id,
+                    MembershipSubjectId = membership == null ? null : membership.SubjectId,
+                    MembershipRole = membership == null
+                        ? (DomainMembershipRole?)null
+                        : membership.Role,
+                    MembershipStatus = membership == null
+                        ? (OrganizationMembershipState?)null
+                        : membership.Status,
+                    MembershipVersion = membership == null ? (long?)null : membership.Version,
+                    MembershipJoinedAtUtc = membership == null
+                        ? (DateTimeOffset?)null
+                        : membership.JoinedAtUtc,
+                    MembershipLastChangedAtUtc = membership == null
+                        ? (DateTimeOffset?)null
+                        : membership.LastChangedAtUtc
+                })
+            .SingleOrDefaultAsync(cancellationToken)
+            .ConfigureAwait(false);
+        if (row is null)
+        {
+            return null;
+        }
+
+        OrganizationMembershipDto? membershipDto = row.MembershipId is { } membershipId &&
+            row.MembershipSubjectId is { } membershipSubjectId &&
+            row.MembershipRole is { } membershipRole &&
+            row.MembershipStatus is { } membershipStatus &&
+            row.MembershipVersion is { } membershipVersion &&
+            row.MembershipJoinedAtUtc is { } membershipJoinedAtUtc &&
+            row.MembershipLastChangedAtUtc is { } membershipLastChangedAtUtc
+                ? new OrganizationMembershipDto(
+                    membershipId,
+                    row.OrganizationId,
+                    membershipSubjectId,
+                    OrganizationMappings.MapRole(membershipRole),
+                    OrganizationMappings.MapStatus(membershipStatus),
+                    membershipVersion,
+                    membershipJoinedAtUtc,
+                    membershipLastChangedAtUtc)
+                : null;
+        return new OrganizationMembershipSnapshotDto(
+            row.OrganizationId,
+            OrganizationMappings.MapStatus(row.OrganizationStatus),
+            membershipDto);
+    }
+
     public async Task<OrganizationAccessDecision> ReadAsync(
         Guid organizationId,
         string subjectId,
         CancellationToken cancellationToken)
     {
-        ArgumentOutOfRangeException.ThrowIfEqual(organizationId, Guid.Empty);
-        string normalizedSubject = NormalizeSubjectId(subjectId);
-        var access = await (
-            from organization in dbContext.Organizations.AsNoTracking()
-            join membership in dbContext.Memberships.AsNoTracking()
-                    .Where(candidate => candidate.SubjectId == normalizedSubject)
-                on organization.Id equals membership.OrganizationId into memberships
-            from membership in memberships.DefaultIfEmpty()
-            where organization.Id == organizationId
-            select new
-            {
-                OrganizationStatus = organization.Status,
-                MembershipStatus = membership == null
-                    ? (OrganizationMembershipState?)null
-                    : membership.Status
-            })
-            .SingleOrDefaultAsync(cancellationToken)
-            .ConfigureAwait(false);
-
-        if (access is null)
+        OrganizationMembershipSnapshotDto? snapshot = await this.FindAsync(
+            organizationId,
+            subjectId,
+            cancellationToken).ConfigureAwait(false);
+        if (snapshot is null)
         {
             return OrganizationAccessDecision.OrganizationNotFound;
         }
 
-        if (access.OrganizationStatus != OrganizationState.Active)
+        if (snapshot.OrganizationStatus != OrganizationStatus.Active)
         {
             return OrganizationAccessDecision.OrganizationInactive;
         }
 
-        return access.MembershipStatus switch
+        return snapshot.Membership?.Status switch
         {
             null => OrganizationAccessDecision.MembershipNotFound,
-            OrganizationMembershipState.Active => OrganizationAccessDecision.Allowed,
+            OrganizationMembershipStatus.Active => OrganizationAccessDecision.Allowed,
             _ => OrganizationAccessDecision.MembershipInactive
         };
     }
