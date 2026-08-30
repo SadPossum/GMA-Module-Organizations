@@ -22,6 +22,12 @@ using ContractEnrollmentClaimStatus =
     Gma.Modules.Organizations.Contracts.OrganizationEnrollmentClaimStatus;
 using OrganizationAccessDecision =
     Gma.Modules.Organizations.Contracts.OrganizationAccessDecision;
+using ContractMembershipRole =
+    Gma.Modules.Organizations.Contracts.OrganizationMembershipRole;
+using ContractMembershipStatus =
+    Gma.Modules.Organizations.Contracts.OrganizationMembershipStatus;
+using ContractOrganizationStatus =
+    Gma.Modules.Organizations.Contracts.OrganizationStatus;
 
 [Trait("Category", "Docker")]
 [Trait("Category", "Integration")]
@@ -110,10 +116,21 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
         await using OrganizationsDbContext readerContext = CreateDbContext(connectionString, commands);
         OrganizationAccessDecisionReader reader = new(readerContext);
 
+        Gma.Modules.Organizations.Contracts.OrganizationMembershipSnapshotDto? snapshot =
+            await reader.FindAsync(
+                organization.Id,
+                "subject-a",
+                CancellationToken.None);
+        Assert.NotNull(snapshot);
+        Assert.Equal(ContractOrganizationStatus.Active, snapshot.OrganizationStatus);
+        Assert.Equal(ContractMembershipRole.Member, snapshot.Membership?.Role);
+        Assert.Equal(ContractMembershipStatus.Active, snapshot.Membership?.Status);
+        Assert.Equal(1, commands.ReaderCommands);
+        Assert.Empty(readerContext.ChangeTracker.Entries());
         Assert.Equal(
             OrganizationAccessDecision.Allowed,
             await reader.ReadAsync(organization.Id, "subject-a", CancellationToken.None));
-        Assert.Equal(1, commands.ReaderCommands);
+        Assert.Equal(2, commands.ReaderCommands);
         Assert.Empty(readerContext.ChangeTracker.Entries());
         Assert.Equal(
             ["subject-a"],
@@ -121,7 +138,7 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
                 organization.Id,
                 ["missing", "subject-a"],
                 CancellationToken.None));
-        Assert.Equal(2, commands.ReaderCommands);
+        Assert.Equal(3, commands.ReaderCommands);
         Assert.Empty(readerContext.ChangeTracker.Entries());
 
         await using (OrganizationsDbContext writer = CreateDbContext(connectionString))
@@ -135,16 +152,47 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
             await writer.SaveChangesAsync();
         }
 
+        snapshot = await reader.FindAsync(
+            organization.Id,
+            "subject-a",
+            CancellationToken.None);
+        Assert.NotNull(snapshot);
+        Assert.Equal(ContractMembershipStatus.Suspended, snapshot.Membership?.Status);
+        Assert.Equal(4, commands.ReaderCommands);
         Assert.Equal(
             OrganizationAccessDecision.MembershipInactive,
             await reader.ReadAsync(organization.Id, "subject-a", CancellationToken.None));
-        Assert.Equal(3, commands.ReaderCommands);
+        Assert.Equal(5, commands.ReaderCommands);
         Assert.Empty(await reader.FilterAllowedAsync(
             organization.Id,
             ["subject-a"],
             CancellationToken.None));
-        Assert.Equal(4, commands.ReaderCommands);
+        Assert.Equal(6, commands.ReaderCommands);
         Assert.Empty(readerContext.ChangeTracker.Entries());
+
+        await using (OrganizationsDbContext writer = CreateDbContext(connectionString))
+        {
+            Organization storedOrganization = await writer.Organizations.SingleAsync();
+            Assert.True(storedOrganization.Suspend(
+                storedOrganization.Version,
+                "user:owner",
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                Now.AddMinutes(2)).IsSuccess);
+            await writer.SaveChangesAsync();
+        }
+
+        snapshot = await reader.FindAsync(
+            organization.Id,
+            "subject-a",
+            CancellationToken.None);
+        Assert.NotNull(snapshot);
+        Assert.Equal(ContractOrganizationStatus.Suspended, snapshot.OrganizationStatus);
+        Assert.Equal(7, commands.ReaderCommands);
+        Assert.Equal(
+            OrganizationAccessDecision.OrganizationInactive,
+            await reader.ReadAsync(organization.Id, "subject-a", CancellationToken.None));
+        Assert.Equal(8, commands.ReaderCommands);
     }
 
     [DockerFact]

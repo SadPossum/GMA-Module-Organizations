@@ -34,28 +34,46 @@ internal static class OrganizationsAdminCliSupport
 
     public static void WriteOrganizations(
         OrganizationCatalogListResponse response,
-        string output) => AdminCliOutput.WriteRows(
-        response.Items,
-        output,
-        [
-            ("OrganizationId", item => item.OrganizationId.ToString()),
-            ("Name", item => item.Name),
-            ("Slug", item => item.Slug),
-            ("Status", item => item.Status.ToString()),
-            ("Owners", item => item.ActiveOwnerCount.ToString(System.Globalization.CultureInfo.InvariantCulture)),
-            ("Version", item => item.Version.ToString(System.Globalization.CultureInfo.InvariantCulture))
-        ]);
+        string output)
+    {
+        if (AdminCliOutput.NormalizeFormat(output) == AdminCliOutput.Json)
+        {
+            AdminCliOutput.WriteObject(response, output);
+            return;
+        }
+
+        AdminCliOutput.WriteRows(
+            response.Items,
+            output,
+            [
+                ("OrganizationId", item => item.OrganizationId.ToString()),
+                ("Name", item => item.Name),
+                ("Slug", item => item.Slug),
+                ("Status", item => item.Status.ToString()),
+                ("Owners", item => item.ActiveOwnerCount.ToString(System.Globalization.CultureInfo.InvariantCulture)),
+                ("Version", item => item.Version.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            ]);
+    }
 
     public static void WriteMembers(
         OrganizationMemberListResponse response,
-        string output) => AdminCliOutput.WriteRows(
-        response.Items,
-        output,
-        [
-            ("MembershipId", item => item.MembershipId.ToString()),
-            ("SubjectId", item => item.SubjectId),
-            ("Role", item => item.Role.ToString()),
-            ("Status", item => item.Status.ToString()),
-            ("Version", item => item.Version.ToString(System.Globalization.CultureInfo.InvariantCulture))
-        ]);
+        string output)
+    {
+        if (AdminCliOutput.NormalizeFormat(output) == AdminCliOutput.Json)
+        {
+            AdminCliOutput.WriteObject(response, output);
+            return;
+        }
+
+        AdminCliOutput.WriteRows(
+            response.Items,
+            output,
+            [
+                ("MembershipId", item => item.MembershipId.ToString()),
+                ("SubjectId", item => item.SubjectId),
+                ("Role", item => item.Role.ToString()),
+                ("Status", item => item.Status.ToString()),
+                ("Version", item => item.Version.ToString(System.Globalization.CultureInfo.InvariantCulture))
+            ]);
+    }
 }

@@ -77,6 +77,7 @@ public static class DependencyInjection
         builder.Services.TryAddEnumerable(ServiceDescriptor.Scoped<IInboxStore, OrganizationsInboxStore>());
         builder.Services.TryAddScoped<IOrganizationAccessDecisionReader, OrganizationAccessDecisionReader>();
         builder.Services.TryAddScoped<IOrganizationAccessCandidateFilter, OrganizationAccessDecisionReader>();
+        builder.Services.TryAddScoped<IOrganizationMembershipReader, OrganizationAccessDecisionReader>();
         builder.Services.TryAddScoped<
             IOrganizationEnrollmentClaimInspector,
             OrganizationEnrollmentClaimInspector>();

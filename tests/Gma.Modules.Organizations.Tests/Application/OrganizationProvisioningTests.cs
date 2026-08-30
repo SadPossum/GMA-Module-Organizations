@@ -77,6 +77,35 @@ public sealed class OrganizationProvisioningTests
     }
 
     [Fact]
+    public async Task Exact_replay_without_the_original_membership_fails_closed()
+    {
+        (TestOrganizationRepository repository,
+            _,
+            ProvisionOrganizationCommandHandler handler) = CreateHandler();
+        Guid organizationId = Guid.NewGuid();
+        ProvisionOrganizationCommand command = Command(organizationId);
+        Assert.True((await handler.HandleAsync(
+            command,
+            CancellationToken.None)).Value.IsSuccess);
+        Assert.Equal(1, repository.Memberships.RemoveAll(membership =>
+            membership.OrganizationId == organizationId));
+
+        OrganizationProvisioningResult replay = (await handler.HandleAsync(
+            command with { ActorId = "admin:recovery" },
+            CancellationToken.None)).Value;
+
+        Assert.Equal(
+            OrganizationProvisioningOutcome.IdentityConflict,
+            replay.Outcome);
+        Assert.Equal(
+            OrganizationApplicationErrors.CreationOperationConflict.Code,
+            replay.ErrorCode);
+        Assert.Null(replay.Summary);
+        Assert.Equal(2, repository.Organizations.Count);
+        Assert.Single(repository.Memberships);
+    }
+
+    [Fact]
     public async Task Changed_identity_slug_collision_cross_channel_and_tombstone_fail_closed()
     {
         (TestOrganizationRepository repository,

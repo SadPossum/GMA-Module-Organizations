@@ -149,7 +149,7 @@ authorization or audit record.
 - Solution synchronization and Organizations boundary checks pass.
 - The complete solution builds with zero warnings and zero errors.
 - SQL Server and PostgreSQL report no pending model changes.
-- All 329 unit and contract tests pass.
+- All 333 unit and contract tests pass.
 - All 16 Docker integration tests pass across the PostgreSQL and SQL Server
   provider lanes. PostgreSQL coverage includes exact, divergent, same-slug,
   cross-channel, inactive-membership, live-row closure, tombstone,
