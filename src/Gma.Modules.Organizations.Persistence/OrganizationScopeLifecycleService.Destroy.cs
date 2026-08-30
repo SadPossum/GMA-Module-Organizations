@@ -9,6 +9,7 @@ using Gma.Modules.Organizations.Contracts;
 using Gma.Modules.Organizations.Domain.Entities;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.EntityFrameworkCore.Storage;
+using Npgsql;
 using ContractDestroyReceipt =
     Contracts.OrganizationScopeDestroyReceipt;
 using DomainDestroyOperation =
@@ -39,6 +40,15 @@ internal sealed partial class OrganizationScopeLifecycleService
                 .ConfigureAwait(false);
         try
         {
+            if (dbContext.Database.IsRelational())
+            {
+                await OrganizationScopeExistenceTransactionLock.AcquireAsync(
+                        dbContext,
+                        request.OrganizationId,
+                        cancellationToken)
+                    .ConfigureAwait(false);
+            }
+
             DomainDestroyReceipt? existingReceipt = await dbContext
                 .OrganizationScopeDestroyReceipts
                 .SingleOrDefaultAsync(
@@ -240,6 +250,17 @@ internal sealed partial class OrganizationScopeLifecycleService
             return DestroyResult(
                 OrganizationScopeDestroyStatus.Completed,
                 receipt: Map(receipt));
+        }
+        catch (DbUpdateException exception) when (
+            transaction is not null &&
+            IsConcurrentPostgreSqlScopeStateCreation(
+                exception,
+                request,
+                dbContext))
+        {
+            await RollbackAsync(transaction).ConfigureAwait(false);
+            dbContext.ChangeTracker.Clear();
+            return DestroyResult(OrganizationScopeDestroyStatus.Stale);
         }
         catch
         {
@@ -505,6 +526,38 @@ internal sealed partial class OrganizationScopeLifecycleService
             await transaction.RollbackAsync(CancellationToken.None)
                 .ConfigureAwait(false);
         }
+    }
+
+    private static bool IsConcurrentPostgreSqlScopeStateCreation(
+        DbUpdateException exception,
+        OrganizationScopeDestroyRequest request,
+        OrganizationsDbContext dbContext)
+    {
+        if (request.ExpectedRevision != 0 ||
+            !dbContext.ChangeTracker.Entries<OrganizationScopeState>().Any(
+                entry => entry.State == EntityState.Added &&
+                    entry.Entity.OrganizationId == request.OrganizationId))
+        {
+            return false;
+        }
+
+        for (Exception? current = exception;
+             current is not null;
+             current = current.InnerException)
+        {
+            if (current is PostgresException
+                {
+                    SqlState: PostgresErrorCodes.UniqueViolation,
+                    SchemaName: OrganizationsMigrations.Schema,
+                    TableName: "organization_scope_states",
+                    ConstraintName: "PK_organization_scope_states"
+                })
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private static bool Matches(

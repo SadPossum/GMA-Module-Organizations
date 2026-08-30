@@ -72,7 +72,8 @@ $uncoordinatedHandlers = @(
     'CreateOrganizationCommandHandler',
     'ExpireOrganizationEnrollmentClaimsCommandHandler',
     'ExpireOrganizationEnrollmentLinksCommandHandler',
-    'ExpireOrganizationInvitationsCommandHandler'
+    'ExpireOrganizationInvitationsCommandHandler',
+    'ProvisionOrganizationCommandHandler'
 )
 $joinSubjectHandlers = @(
     'AcceptOrganizationInvitationCommandHandler',
@@ -181,20 +182,75 @@ foreach ($handlerName in $classifiedHandlers) {
     }
 }
 
+$creationWorkflowPath = Join-Path $commandHandlerDirectory 'OrganizationCreationWorkflow.cs'
+if (-not (Test-Path -LiteralPath $creationWorkflowPath)) {
+    $errors.Add('OrganizationCreationWorkflow.cs must contain the shared organization creation workflow.')
+}
+else {
+    $source = Get-Content -LiteralPath $creationWorkflowPath -Raw
+    $replay = [regex]::Match($source, 'if\s*\(existing is not null\)')
+    $freshAuthorizations = [regex]::Matches($source, 'authorizeFreshAsync\(')
+    $slugCheck = [regex]::Match($source, 'organizations\.SlugExistsAsync\(')
+    $firstMutation = [regex]::Match($source, 'Organization\.Create\(')
+    if (-not $replay.Success -or $freshAuthorizations.Count -ne 1 -or
+        -not $slugCheck.Success -or -not $firstMutation.Success -or
+        $replay.Index -gt $freshAuthorizations[0].Index -or
+        $freshAuthorizations[0].Index -gt $slugCheck.Index -or
+        $slugCheck.Index -gt $firstMutation.Index) {
+        $errors.Add('OrganizationCreationWorkflow must preserve exact replay before one fresh authorization, then slug validation before its first aggregate mutation.')
+    }
+}
+
 $creationHandler = $commandHandlers |
     Where-Object BaseName -eq 'CreateOrganizationCommandHandler'
 if ($null -ne $creationHandler) {
     $source = Get-Content -LiteralPath $creationHandler.FullName -Raw
-    $replay = [regex]::Match($source, 'if\s*\(existing is not null\)')
+    $workflowExecutions = [regex]::Matches($source, 'creation\.ExecuteAsync\(')
     $admissions = [regex]::Matches($source, 'admissionPolicy\.AuthorizeAsync\(')
-    $slugCheck = [regex]::Match($source, 'organizations\.SlugExistsAsync\(')
-    $firstMutation = [regex]::Match($source, 'Organization\.Create\(')
-    if (-not $replay.Success -or $admissions.Count -ne 1 -or
-        -not $slugCheck.Success -or -not $firstMutation.Success -or
-        $replay.Index -gt $admissions[0].Index -or
-        $admissions[0].Index -gt $slugCheck.Index -or
-        $slugCheck.Index -gt $firstMutation.Index) {
-        $errors.Add('CreateOrganizationCommandHandler must preserve exact replay before one fresh admission, then slug validation before its first aggregate mutation.')
+    $selfServiceFingerprints = [regex]::Matches(
+        $source,
+        'OrganizationCreationFingerprint\.Compute\(')
+    $provisioningFingerprints = [regex]::Matches(
+        $source,
+        'OrganizationCreationFingerprint\.ComputeProvisioning\(')
+    $activeReplayModes = [regex]::Matches(
+        $source,
+        'OrganizationCreationReplayMembership\.Active')
+    $existingReplayModes = [regex]::Matches(
+        $source,
+        'OrganizationCreationReplayMembership\.Existing')
+    if ($workflowExecutions.Count -ne 1 -or $admissions.Count -ne 1 -or
+        $selfServiceFingerprints.Count -ne 1 -or
+        $provisioningFingerprints.Count -ne 0 -or
+        $activeReplayModes.Count -ne 1 -or $existingReplayModes.Count -ne 0) {
+        $errors.Add('CreateOrganizationCommandHandler must delegate exactly once with self-service admission, its fingerprint, and active-membership replay.')
+    }
+}
+
+$provisioningHandler = $commandHandlers |
+    Where-Object BaseName -eq 'ProvisionOrganizationCommandHandler'
+if ($null -ne $provisioningHandler) {
+    $source = Get-Content -LiteralPath $provisioningHandler.FullName -Raw
+    $workflowExecutions = [regex]::Matches($source, 'creation\.ExecuteAsync\(')
+    $admissionPolicyReferences = [regex]::Matches($source, 'admissionPolicy')
+    $selfServiceFingerprints = [regex]::Matches(
+        $source,
+        'OrganizationCreationFingerprint\.Compute\(')
+    $provisioningFingerprints = [regex]::Matches(
+        $source,
+        'OrganizationCreationFingerprint\.ComputeProvisioning\(')
+    $activeReplayModes = [regex]::Matches(
+        $source,
+        'OrganizationCreationReplayMembership\.Active')
+    $existingReplayModes = [regex]::Matches(
+        $source,
+        'OrganizationCreationReplayMembership\.Existing')
+    if ($workflowExecutions.Count -ne 1 -or
+        $admissionPolicyReferences.Count -ne 0 -or
+        $selfServiceFingerprints.Count -ne 0 -or
+        $provisioningFingerprints.Count -ne 1 -or
+        $activeReplayModes.Count -ne 0 -or $existingReplayModes.Count -ne 1) {
+        $errors.Add('ProvisionOrganizationCommandHandler must delegate exactly once without self-service admission, using its fingerprint and existing-membership replay.')
     }
 }
 

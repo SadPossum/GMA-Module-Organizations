@@ -1,6 +1,5 @@
 namespace Gma.Modules.Organizations.Persistence.Repositories;
 
-using Gma.Framework.Persistence.EntityFrameworkCore;
 using Gma.Modules.Organizations.Application.Ports;
 using Gma.Modules.Organizations.Domain.Aggregates;
 using Microsoft.EntityFrameworkCore;
@@ -8,16 +7,26 @@ using Microsoft.EntityFrameworkCore;
 internal sealed class OrganizationCreationCoordinator(
     OrganizationsDbContext dbContext) : IOrganizationCreationCoordinator
 {
-    public async Task<Organization?> AcquireAsync(
+    public async Task<OrganizationCreationAcquisition> AcquireAsync(
         Guid operationId,
         CancellationToken cancellationToken)
     {
-        await EfTransactionKeyLock.AcquireAsync(
+        await OrganizationScopeExistenceTransactionLock.AcquireAsync(
             dbContext,
-            $"gma:organizations:create:{operationId:N}",
+            operationId,
             cancellationToken).ConfigureAwait(false);
-        return await dbContext.Organizations.SingleOrDefaultAsync(
+        Organization? organization = await dbContext.Organizations
+            .SingleOrDefaultAsync(
             organization => organization.Id == operationId,
             cancellationToken).ConfigureAwait(false);
+        bool isScopeClosed = await dbContext.OrganizationScopeStates
+            .AsNoTracking()
+            .AnyAsync(
+                state => state.OrganizationId == operationId &&
+                    state.IsClosed,
+                cancellationToken).ConfigureAwait(false);
+        return new OrganizationCreationAcquisition(
+            organization,
+            isScopeClosed);
     }
 }

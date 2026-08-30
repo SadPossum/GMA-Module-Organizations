@@ -2,6 +2,13 @@
 
 Reusable organization, membership, invitation, and enrollment governance for GMA applications.
 
+Trusted product orchestrators may opt in to the Contracts-only
+`IOrganizationProvisioner` through `AddOrganizationProvisioning()`. The
+in-process capability atomically establishes an organization and initial owner
+for a caller-owned id, supports exact recovery, and adds no generic
+administration endpoint; the caller retains authorization, audit, durable
+product binding, and downstream-readiness responsibility.
+
 The Contracts package exposes an owner-protected, idempotent ordinary-membership lifecycle facade for product-owned onboarding and offboarding coordinators. Product employment and authorization policy remains outside Organizations.
 
 Composed modules may reconcile one known enrollment claim through

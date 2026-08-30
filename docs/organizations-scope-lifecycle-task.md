@@ -92,6 +92,30 @@ durable operation. Active outbox leases return `Busy`; pending or abandoned
 transport rows may then be discarded because closure intentionally prevents
 their business effects from regrowing the scope.
 
+Before reading lifecycle state, every relational destruction batch takes the
+same provider-neutral exclusive transaction key already used by organization
+creation and exact creation replay. The literal resource remains stable for
+rolling-upgrade compatibility. If replay already holds it, destruction waits
+for that transaction; if destruction holds it, replay waits and then observes
+the committed closed tombstone. The key is derived from the organization id,
+so this ordering introduces no global organization mutex.
+
+PostgreSQL may establish a Serializable snapshot while destruction is waiting
+for that key. If a fresh creator then commits the previously absent scope, the
+stale destruction snapshot can reach only the exact scope-state primary-key
+collision. Organizations rolls back that owned transaction, clears its stale
+tracking state, and returns typed `Stale`. Other unique-constraint failures are
+not translated, so operation and receipt defects remain visible.
+
+The supported production call shape lets this facade own its Organizations
+transaction. An ambient `OrganizationsDbContext` transaction is used only by
+the deterministic concurrency harness; the current contract does not promise
+its isolation, lock-order, result-durability, or commit semantics to product
+orchestration. A future ambient composition seam must define and enforce those
+properties first. Transaction-lock timeout, cancellation, or deadlock also
+fails the call rather than becoming a lifecycle status; after the transaction
+has rolled back, callers retry the same idempotent request.
+
 Each call removes at most one non-empty bounded batch in foreign-key-safe
 order:
 
@@ -169,6 +193,7 @@ clause.
 - cross-module Organizations/Access Control/Tenancy ordering;
 - product export-field catalogues and protected artifacts;
 - backup expiry and restore-readiness orchestration;
+- a supported caller-owned Organizations transaction contract;
 - a public deletion endpoint; and
 - generalizing the lifecycle contract into Framework before another module
   proves the same semantic model.

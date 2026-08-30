@@ -49,6 +49,7 @@
     <File Path="docs/organizations-natural-expiry-task.md" />
     <File Path="docs/organizations-ordinal-identity-storage-task.md" />
     <File Path="docs/organizations-ownership-transfer-retry-safety-task.md" />
+    <File Path="docs/organizations-platform-provisioning-contract-task.md" />
     <File Path="docs/organizations-production-hardening-task.md" />
     <File Path="docs/organizations-profile-lifecycle-retry-safety-task.md" />
     <File Path="docs/organizations-scope-lifecycle-contract-boundary-task.md" />
