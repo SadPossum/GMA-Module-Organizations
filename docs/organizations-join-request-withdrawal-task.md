@@ -1,7 +1,8 @@
 # Organizations Join-Request Withdrawal Task
 
-Status: implemented and verified
+Status: Organizations implemented and verified; BunkFy product adoption in progress
 Date: 2026-08-09
+Publication correction: 2026-08-11
 
 ## Goal
 
@@ -73,11 +74,20 @@ after the applicant no longer wants access.
 
 ## Product Alignment
 
-BunkFy Workspaces will consume the withdrawal event, transition the matching
-Staff onboarding record to its own terminal `Withdrawn` state, redact staged
-applicant profile data, and expose the result to the join flow. The web client
-will offer withdrawal only while an authoritative pending application supplies
-the claim id and version.
+Canonical BunkFy Backend contains the baseline Workspaces withdrawal consumer in
+commit `52b345e6e22ba894536f7861b016bd1c5b715992`. Later cross-repository audit found
+that durable out-of-order correlation, retention reconciliation, migration and
+catalog cutover, and release evidence still required hardening. That candidate
+is tracked in [BunkFy Backend draft PR #11](https://github.com/SadPossum/BunkFy.Backend/pull/11).
+An open draft is review evidence only; it does not establish canonical, released,
+deployed, or end-to-end product adoption.
+
+Canonical BunkFy Web contains the withdrawal interaction in commit
+`9e773c66864eb4ae4fe26dde60c14f317fca4d9f`. Web draft
+[PR #23](https://github.com/SadPossum/BunkFy.Web/pull/23) adds recovery, scale,
+and actor-switch hardening; it is not evidence that the backend rollout is
+complete. The client must offer withdrawal only while an authoritative pending
+application supplies the claim id and version.
 
 ## Delivery
 
@@ -86,24 +96,41 @@ the claim id and version.
 - [x] Add the authenticated command and HTTP endpoint with subject isolation,
   expiry precedence, exact replay, and one-time capacity release.
 - [x] Extend domain, application, contract, retention, and provider tests.
-- [x] Consume the event in BunkFy Workspaces with a distinct terminal state and
-  database constraints that require staged profile redaction.
-- [x] Add the BunkFy join-page withdrawal interaction and generated contract
-  alignment.
-- [x] Run focused tests while editing, then one completed-slice non-Docker gate
-  and one focused provider gate before publication.
+- [x] Land the baseline BunkFy Workspaces withdrawal consumer and distinct
+  terminal state in commit `52b345e6e22ba894536f7861b016bd1c5b715992`.
+- [x] Land the BunkFy join-page withdrawal interaction in commit
+  `9e773c66864eb4ae4fe26dde60c14f317fca4d9f`.
+
+### Downstream adoption (tracked separately)
+
+- [ ] Merge and verify durable Workspaces out-of-order correlation, staged-data
+  redaction, retention reconciliation, persistence constraints, and rollout
+  guardrails. Candidate: [BunkFy Backend draft PR #11](https://github.com/SadPossum/BunkFy.Backend/pull/11).
+- [ ] Merge the BunkFy Web recovery and scale hardening. Candidate:
+  [BunkFy Web draft PR #23](https://github.com/SadPossum/BunkFy.Web/pull/23).
+- [ ] Complete backend full gates, the single-version Workspaces cutover,
+  catalog and migration approval, load evidence, and deployed end-to-end smoke.
+- [ ] Record named merged commits and downstream CI, provider, migration, and
+  deployment evidence before changing product adoption to complete.
 
 ## Verification
 
 - all 219 Organizations unit tests pass;
-- all 343 BunkFy Workspaces unit tests pass;
-- the complete BunkFy non-Docker verifier passes with a warning-free build,
-  synchronized solution graph, clean migration models, and architecture guards;
-- all 253 web tests, lint, typecheck, production build, OpenAPI snapshot, and
-  generated-contract checks pass;
-- focused PostgreSQL proofs pass for Organizations state, capacity, event
-  privacy, active-source retention, terminal cleanup, and BunkFy projection,
-  redaction, migration, and retention behavior.
+- 11 focused Organizations PostgreSQL proofs pass for state, capacity, event
+  privacy, active-source retention, and terminal cleanup;
+- the canonical web interaction commit passed hosted Validate run `31324199360`
+  and Security Baseline run `31324199344`;
+- the canonical baseline backend consumer was followed by successful Validate
+  run `31324337679` at commit `14498ce77300e8f68c127c7e80ff199a693a0778`.
+
+Backend draft PR #11 and Web draft PR #23 record their own current local and
+hosted evidence. Those draft results are review evidence, not canonical merge,
+release, or deployment proof. Deployed end-to-end verification remains pending.
+
+The 2026-08-09 version incorrectly marked BunkFy consumer and end-to-end product
+alignment complete. This correction separates the reusable Organizations slice,
+the baseline downstream commits, the open hardening drafts, and deployment
+evidence.
 
 ## Not In This Slice
 
