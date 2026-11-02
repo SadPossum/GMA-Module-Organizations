@@ -20,6 +20,8 @@ using ContractEnrollmentClaimDto =
     Gma.Modules.Organizations.Contracts.OrganizationEnrollmentClaimDto;
 using ContractEnrollmentClaimStatus =
     Gma.Modules.Organizations.Contracts.OrganizationEnrollmentClaimStatus;
+using ContractInvitationStatus =
+    Gma.Modules.Organizations.Contracts.OrganizationInvitationStatus;
 using OrganizationAccessDecision =
     Gma.Modules.Organizations.Contracts.OrganizationAccessDecision;
 using ContractMembershipRole =
@@ -28,6 +30,12 @@ using ContractMembershipStatus =
     Gma.Modules.Organizations.Contracts.OrganizationMembershipStatus;
 using ContractOrganizationStatus =
     Gma.Modules.Organizations.Contracts.OrganizationStatus;
+using ContractMembershipSnapshot =
+    Gma.Modules.Organizations.Contracts.OrganizationMembershipSnapshot;
+using ContractScopeStatus =
+    Gma.Modules.Organizations.Contracts.OrganizationScopeStatus;
+using OrganizationScopeCloseTransition =
+    Gma.Modules.Organizations.Domain.Entities.OrganizationScopeCloseTransition;
 
 [Trait("Category", "Docker")]
 [Trait("Category", "Integration")]
@@ -196,6 +204,138 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
     }
 
     [DockerFact]
+    public async Task Membership_inspector_uses_one_exact_untracked_query_and_observes_current_state()
+    {
+        await using PostgreSqlContainer postgreSql =
+            CreatePostgreSql("organizations_membership_inspector_tests");
+        await postgreSql.StartAsync();
+        string connectionString = postgreSql.GetConnectionString();
+        Organization organization = CreateOrganization(
+            "Membership House",
+            "membership-house");
+        OrganizationMembership membership = OrganizationMembership.Create(
+            Guid.NewGuid(),
+            organization.Id,
+            "Subject-A",
+            OrganizationMembershipRole.Member,
+            "user:owner",
+            Guid.NewGuid(),
+            Now).Value;
+        await using (OrganizationsDbContext seed = CreateDbContext(connectionString))
+        {
+            await seed.Database.MigrateAsync();
+            seed.AddRange(organization, membership);
+            await seed.SaveChangesAsync();
+        }
+
+        CountingCommandInterceptor commands = new();
+        await using OrganizationsDbContext readerContext =
+            CreateDbContext(connectionString, commands);
+        OrganizationMembershipInspector inspector = new(readerContext);
+
+        ContractMembershipSnapshot? initial = await inspector.FindAsync(
+            organization.Id,
+            membership.Id,
+            " Subject-A ");
+
+        Assert.NotNull(initial);
+        Assert.Equal(ContractOrganizationStatus.Active, initial.OrganizationStatus);
+        Assert.Equal(ContractScopeStatus.Open, initial.ScopeStatus);
+        Assert.Equal(1, initial.ScopeRevision);
+        Assert.Equal(ContractMembershipRole.Member, initial.Role);
+        Assert.Equal(ContractMembershipStatus.Active, initial.MembershipStatus);
+        Assert.Equal(1, initial.MembershipVersion);
+        Assert.Equal(1, commands.ReaderCommands);
+        Assert.Empty(readerContext.ChangeTracker.Entries());
+
+        Assert.Null(await inspector.FindAsync(
+            organization.Id,
+            membership.Id,
+            "subject-a"));
+        Assert.Equal(2, commands.ReaderCommands);
+        Assert.Empty(readerContext.ChangeTracker.Entries());
+
+        await using (OrganizationsDbContext legacy = CreateDbContext(connectionString))
+        {
+            Assert.Equal(
+                1,
+                await legacy.OrganizationScopeStates.ExecuteDeleteAsync());
+        }
+
+        ContractMembershipSnapshot? legacySnapshot = await inspector.FindAsync(
+            organization.Id,
+            membership.Id,
+            "Subject-A");
+        Assert.NotNull(legacySnapshot);
+        Assert.Equal(ContractScopeStatus.Open, legacySnapshot.ScopeStatus);
+        Assert.Equal(0, legacySnapshot.ScopeRevision);
+        Assert.Equal(3, commands.ReaderCommands);
+        Assert.Empty(readerContext.ChangeTracker.Entries());
+
+        await using (OrganizationsDbContext writer = CreateDbContext(connectionString))
+        {
+            Organization storedOrganization = await writer.Organizations.SingleAsync();
+            OrganizationMembership storedMembership = await writer.Memberships.SingleAsync();
+            Assert.True(storedMembership.PromoteToOwner(
+                storedMembership.Version,
+                "user:owner",
+                Guid.NewGuid(),
+                Now.AddMinutes(1)).IsSuccess);
+            Assert.True(storedMembership.Suspend(
+                storedMembership.Version,
+                "user:owner",
+                Guid.NewGuid(),
+                Now.AddMinutes(2)).IsSuccess);
+            Assert.True(storedOrganization.Suspend(
+                storedOrganization.Version,
+                "user:owner",
+                Guid.NewGuid(),
+                Guid.NewGuid(),
+                Now.AddMinutes(2)).IsSuccess);
+            await writer.SaveChangesAsync();
+        }
+
+        ContractMembershipSnapshot? current = await inspector.FindAsync(
+            organization.Id,
+            membership.Id,
+            "Subject-A");
+        Assert.NotNull(current);
+        Assert.Equal(ContractOrganizationStatus.Suspended, current.OrganizationStatus);
+        Assert.Equal(ContractScopeStatus.Open, current.ScopeStatus);
+        Assert.Equal(1, current.ScopeRevision);
+        Assert.Equal(ContractMembershipRole.Owner, current.Role);
+        Assert.Equal(ContractMembershipStatus.Suspended, current.MembershipStatus);
+        Assert.Equal(3, current.MembershipVersion);
+        Assert.Equal(4, commands.ReaderCommands);
+        Assert.Empty(readerContext.ChangeTracker.Entries());
+
+        await using (OrganizationsDbContext closer = CreateDbContext(connectionString))
+        {
+            Assert.Equal(
+                OrganizationScopeCloseTransition.Completed,
+                (await closer.OrganizationScopeStates.SingleAsync()).Close(
+                    Guid.NewGuid(),
+                    new string('a', 64),
+                    Now.AddMinutes(3)));
+            await closer.SaveChangesAsync();
+        }
+
+        ContractMembershipSnapshot? closed = await inspector.FindAsync(
+            organization.Id,
+            membership.Id,
+            "Subject-A");
+        Assert.NotNull(closed);
+        Assert.Equal(ContractOrganizationStatus.Suspended, closed.OrganizationStatus);
+        Assert.Equal(ContractScopeStatus.Closed, closed.ScopeStatus);
+        Assert.Equal(2, closed.ScopeRevision);
+        Assert.Equal(ContractMembershipRole.Owner, closed.Role);
+        Assert.Equal(ContractMembershipStatus.Suspended, closed.MembershipStatus);
+        Assert.Equal(3, closed.MembershipVersion);
+        Assert.Equal(5, commands.ReaderCommands);
+        Assert.Empty(readerContext.ChangeTracker.Entries());
+    }
+
+    [DockerFact]
     public async Task Enrollment_claim_inspector_uses_one_exact_untracked_postgresql_query()
     {
         await using PostgreSqlContainer postgreSql =
@@ -228,6 +368,50 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
         Assert.Equal(claim.Id, found.ClaimId);
         Assert.Equal(ContractEnrollmentClaimStatus.Pending, found.Status);
         Assert.Equal(claim.DecisionExpiresAtUtc, found.DecisionExpiresAtUtc);
+        Assert.Equal(1, commands.ReaderCommands);
+        Assert.Empty(readerContext.ChangeTracker.Entries());
+    }
+
+    [DockerFact]
+    public async Task Invitation_inspector_uses_one_exact_untracked_postgresql_query_and_effective_expiry()
+    {
+        await using PostgreSqlContainer postgreSql =
+            CreatePostgreSql("organizations_invitation_inspector_tests");
+        await postgreSql.StartAsync();
+        string connectionString = postgreSql.GetConnectionString();
+        Organization organization = CreateOrganization(
+            "Invitation House",
+            "invitation-house");
+        DateTimeOffset expiresAtUtc = Now.AddHours(1);
+        OrganizationInvitation invitation = OrganizationInvitation.Create(
+            Guid.NewGuid(),
+            organization.Id,
+            "owner",
+            recipientEmail: null,
+            new string('e', OrganizationInvitation.TokenDigestLength),
+            expiresAtUtc,
+            "user:owner",
+            Guid.NewGuid(),
+            Now).Value;
+        await using (OrganizationsDbContext seed = CreateDbContext(connectionString))
+        {
+            await seed.Database.MigrateAsync();
+            seed.AddRange(organization, invitation);
+            await seed.SaveChangesAsync();
+        }
+
+        CountingCommandInterceptor commands = new();
+        await using OrganizationsDbContext readerContext =
+            CreateDbContext(connectionString, commands);
+        OrganizationInvitationInspector inspector = new(
+            readerContext,
+            new QueryCompletionClock(commands, expiresAtUtc));
+
+        ContractInvitationStatus? found = await inspector.FindStatusAsync(
+            organization.Id,
+            invitation.Id);
+
+        Assert.Equal(ContractInvitationStatus.Expired, found);
         Assert.Equal(1, commands.ReaderCommands);
         Assert.Empty(readerContext.ChangeTracker.Entries());
     }
@@ -406,5 +590,19 @@ public sealed class OrganizationsPostgreSqlIntegrationTests
     private sealed class FixedClock(DateTimeOffset utcNow) : Gma.Framework.Runtime.Time.ISystemClock
     {
         public DateTimeOffset UtcNow { get; } = utcNow;
+    }
+
+    private sealed class QueryCompletionClock(
+        CountingCommandInterceptor commands,
+        DateTimeOffset utcNow) : Gma.Framework.Runtime.Time.ISystemClock
+    {
+        public DateTimeOffset UtcNow
+        {
+            get
+            {
+                Assert.Equal(1, commands.ReaderCommands);
+                return utcNow;
+            }
+        }
     }
 }

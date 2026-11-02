@@ -25,6 +25,9 @@ using DomainMembershipRole =
 [Trait("Category", "Integration")]
 public sealed class OrganizationScopeLifecyclePostgreSqlIntegrationTests
 {
+    private const int LargeMembershipCount = 10_001;
+    private const string MembershipExportIndexName =
+        "IX_organization_memberships_OrganizationId_Id";
     private static readonly DateTimeOffset Now =
         new(2026, 8, 4, 14, 0, 0, TimeSpan.Zero);
 
@@ -131,6 +134,224 @@ public sealed class OrganizationScopeLifecyclePostgreSqlIntegrationTests
         await VerifyTerminalProtectionAsync(
             connectionString,
             seeded.OrganizationId);
+    }
+
+    [DockerFact]
+    public async Task Membership_export_keyset_pages_more_than_ten_thousand_and_rejects_revision_drift()
+    {
+        await using PostgreSqlContainer postgreSql =
+            new PostgreSqlBuilder("postgres:16-alpine")
+                .WithDatabase("organization_membership_export_tests")
+                .Build();
+        await postgreSql.StartAsync();
+        string connectionString = postgreSql.GetConnectionString();
+        Guid organizationId = Id(50_000);
+
+        await using (OrganizationsDbContext seed =
+                     CreateDbContext(connectionString))
+        {
+            await seed.Database.MigrateAsync();
+            Organization organization = Organization.Create(
+                organizationId,
+                "Large Export House",
+                "large-export-house",
+                "user:owner",
+                Id(50_001),
+                Now).Value;
+            OrganizationMembership owner = CreateMembership(
+                Id(1),
+                organizationId,
+                "subject-1",
+                DomainMembershipRole.Owner);
+            seed.AddRange(organization, owner);
+            await seed.SaveChangesAsync();
+            await seed.Database.ExecuteSqlInterpolatedAsync($"""
+                INSERT INTO organizations.organization_memberships
+                    ("Id", "OrganizationId", "SubjectId", "Role", "Status",
+                     "Version", "CreatedBy", "JoinedAtUtc", "LastChangedBy",
+                     "LastChangedAtUtc")
+                SELECT
+                    ('00000000-0000-0000-0000-' ||
+                        lpad(value::text, 12, '0'))::uuid,
+                    {organizationId},
+                    'subject-' || value::text,
+                    1,
+                    1,
+                    1,
+                    'system:large-export',
+                    {Now},
+                    'system:large-export',
+                    {Now}
+                FROM generate_series(2, {LargeMembershipCount}) AS value;
+                """);
+            await seed.Database.ExecuteSqlInterpolatedAsync($"""
+                UPDATE organizations.organization_scope_states
+                SET "Version" = "Version" + 1
+                WHERE "OrganizationId" = {organizationId};
+                """);
+        }
+
+        await VerifyMembershipExportIndexAsync(
+            connectionString,
+            MembershipExportIndexName);
+        long revision = await ReadOpenRevisionAsync(
+            connectionString,
+            organizationId);
+        Assert.Equal(2, revision);
+        await VerifyLargeMembershipExportAsync(
+            connectionString,
+            organizationId,
+            revision);
+        await VerifyMembershipExportRevisionDriftAsync(
+            connectionString,
+            organizationId,
+            revision);
+    }
+
+    private static async Task VerifyMembershipExportIndexAsync(
+        string connectionString,
+        string expectedIndexName)
+    {
+        await using NpgsqlConnection connection = new(connectionString);
+        await connection.OpenAsync();
+        await using NpgsqlCommand command = connection.CreateCommand();
+        command.CommandText = """
+            SELECT indexdef
+            FROM pg_indexes
+            WHERE schemaname = 'organizations'
+              AND tablename = 'organization_memberships'
+              AND indexname = @indexName;
+            """;
+        command.Parameters.AddWithValue("indexName", expectedIndexName);
+        string? definition = (string?)await command.ExecuteScalarAsync();
+
+        Assert.NotNull(definition);
+        Assert.Contains(
+            "(\"OrganizationId\", \"Id\")",
+            definition,
+            StringComparison.Ordinal);
+    }
+
+    private static async Task<long> ReadOpenRevisionAsync(
+        string connectionString,
+        Guid organizationId)
+    {
+        await using OrganizationsDbContext dbContext =
+            CreateDbContext(connectionString);
+        OrganizationScopeSnapshot snapshot = await new
+                OrganizationScopeLifecycleService(dbContext, new FixedClock())
+            .GetSnapshotAsync(organizationId, CancellationToken.None);
+        Assert.Equal(OrganizationScopeStatus.Open, snapshot.Status);
+        return snapshot.Revision;
+    }
+
+    private static async Task VerifyLargeMembershipExportAsync(
+        string connectionString,
+        Guid organizationId,
+        long revision)
+    {
+        await using OrganizationsDbContext dbContext =
+            CreateDbContext(connectionString);
+        OrganizationScopeLifecycleService lifecycle =
+            new(dbContext, new FixedClock());
+        string? afterCursor = null;
+        Guid? previousMembershipId = null;
+        int exportedCount = 0;
+        int pageCount = 0;
+        bool hasMore;
+        do
+        {
+            OrganizationScopeExportPage page = await lifecycle.ExportAsync(
+                new OrganizationScopeExportRequest(
+                    organizationId,
+                    revision,
+                    OrganizationScopeExportStore.Memberships,
+                    afterCursor,
+                    OrganizationScopeLifecycleLimits.MaximumPageSize),
+                CancellationToken.None);
+            Assert.Equal(OrganizationScopeExportStatus.Completed, page.Status);
+            Assert.Equal(revision, page.ScopeRevision);
+            Assert.InRange(
+                page.Records.Count,
+                1,
+                OrganizationScopeLifecycleLimits.MaximumPageSize);
+            foreach (OrganizationScopeExportRecord record in page.Records)
+            {
+                OrganizationScopeMembershipExportRecord membership =
+                    Assert.IsType<OrganizationScopeMembershipExportRecord>(
+                        record);
+                Assert.Equal(organizationId, membership.OrganizationId);
+                if (previousMembershipId.HasValue)
+                {
+                    Assert.True(membership.MembershipId.CompareTo(
+                        previousMembershipId.Value) > 0);
+                }
+
+                previousMembershipId = membership.MembershipId;
+                exportedCount++;
+            }
+
+            Assert.Equal(
+                "id:" + previousMembershipId!.Value.ToString("D"),
+                page.NextCursor);
+            afterCursor = page.NextCursor;
+            hasMore = page.HasMore;
+            pageCount++;
+        }
+        while (hasMore);
+
+        Assert.Equal(LargeMembershipCount, exportedCount);
+        Assert.Equal(
+            (int)Math.Ceiling(
+                LargeMembershipCount /
+                (double)OrganizationScopeLifecycleLimits.MaximumPageSize),
+            pageCount);
+        Assert.Equal(Id(LargeMembershipCount), previousMembershipId);
+    }
+
+    private static async Task VerifyMembershipExportRevisionDriftAsync(
+        string connectionString,
+        Guid organizationId,
+        long selectedRevision)
+    {
+        await using OrganizationsDbContext reader =
+            CreateDbContext(connectionString);
+        OrganizationScopeLifecycleService lifecycle =
+            new(reader, new FixedClock());
+        OrganizationScopeExportPage first = await lifecycle.ExportAsync(
+            new OrganizationScopeExportRequest(
+                organizationId,
+                selectedRevision,
+                OrganizationScopeExportStore.Memberships,
+                AfterCursor: null,
+                PageSize: 200),
+            CancellationToken.None);
+        Assert.Equal(OrganizationScopeExportStatus.Completed, first.Status);
+        Assert.True(first.HasMore);
+
+        await using (OrganizationsDbContext writer =
+                     CreateDbContext(connectionString))
+        {
+            writer.Memberships.Add(CreateMembership(
+                Id(LargeMembershipCount + 1),
+                organizationId,
+                "subject-after-selection",
+                DomainMembershipRole.Member));
+            await writer.SaveChangesAsync();
+        }
+
+        OrganizationScopeExportPage stale = await lifecycle.ExportAsync(
+            new OrganizationScopeExportRequest(
+                organizationId,
+                selectedRevision,
+                OrganizationScopeExportStore.Memberships,
+                first.NextCursor,
+                PageSize: 200),
+            CancellationToken.None);
+        Assert.Equal(OrganizationScopeExportStatus.Stale, stale.Status);
+        Assert.Empty(stale.Records);
+        Assert.False(stale.HasMore);
+        Assert.Equal(selectedRevision + 1, stale.ScopeRevision);
     }
 
     private static async Task<SeededScope> SeedAsync(string connectionString)
