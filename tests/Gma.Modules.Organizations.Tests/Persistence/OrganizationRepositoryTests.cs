@@ -139,6 +139,21 @@ public sealed class OrganizationRepositoryTests
     }
 
     [Fact]
+    public void Membership_model_has_organization_id_keyset_export_index()
+    {
+        using OrganizationsDbContext dbContext = CreateDbContext();
+
+        var entity = dbContext.Model.FindEntityType(
+            typeof(OrganizationMembership));
+        var index = Assert.Single(entity!.GetIndexes(), item =>
+            item.Properties.Select(property => property.Name).SequenceEqual(
+                [nameof(OrganizationMembership.OrganizationId),
+                 nameof(OrganizationMembership.Id)]));
+
+        Assert.False(index.IsUnique);
+    }
+
+    [Fact]
     public void Organization_creation_fingerprint_is_optional_fixed_length_state()
     {
         using OrganizationsDbContext dbContext = CreateDbContext();
