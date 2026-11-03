@@ -271,10 +271,15 @@ public sealed class OrganizationCreationPostgreSqlIntegrationTests
                 "admin:cross-channel"));
         await Task.WhenAll(selfService, trusted);
         Assert.False(selfService.Result.IsSuccess);
-        Assert.Equal(
+        // Serialized replay/conflict checks precede fresh admission. Either
+        // denial is valid here; strict outcomes for both orders are below.
+        Assert.Contains(selfService.Result.Error, new[]
+        {
             OrganizationApplicationErrors.SelfServiceCreationDisabled,
-            selfService.Result.Error);
-        Assert.True(trusted.Result.IsSuccess);
+            OrganizationApplicationErrors.CreationOperationConflict
+        });
+        Assert.Equal(OrganizationProvisioningOutcome.Provisioned, trusted.Result.Outcome);
+        await AssertCreationStateAsync(provider, crossChannelId, created: true);
 
         Guid closingId = Guid.NewGuid();
         OrganizationProvisioningRequest closingRequest = new(
@@ -345,6 +350,62 @@ public sealed class OrganizationCreationPostgreSqlIntegrationTests
             OrganizationProvisioningOutcome.IdentityConflict,
             closed.Outcome);
         Assert.Null(closed.Summary);
+    }
+
+    [DockerFact]
+    public async Task Disabled_self_service_cannot_reserve_or_replay_trusted_creation_in_either_order()
+    {
+        await using PostgreSqlContainer postgreSql =
+            new PostgreSqlBuilder("postgres:16-alpine")
+                .WithDatabase("organization_creation_order_tests")
+                .Build();
+        await postgreSql.StartAsync();
+        RecordingCreationPolicy policy = new();
+        await using ServiceProvider provider = CreateProvider(
+            postgreSql.GetConnectionString(), selfServiceCreationEnabled: false, policy);
+        await MigrateAsync(provider);
+
+        foreach (bool trustedFirst in new[] { false, true })
+        {
+            Guid operationId = Guid.NewGuid();
+            string slug = trustedFirst ? "trusted-first" : "self-service-first";
+            string subject = "owner-" + slug;
+            CreateOrganizationCommand command = CreateCommand(
+                operationId, "Ordered House", slug, subject);
+            OrganizationProvisioningRequest request = new(
+                operationId, "Ordered House", slug, subject, "admin:ordered");
+
+            if (!trustedFirst)
+            {
+                Result<OrganizationMembershipSummaryDto> disabled = await DispatchAsync(provider, command);
+                Assert.True(disabled.IsFailure);
+                Assert.Equal(OrganizationApplicationErrors.SelfServiceCreationDisabled, disabled.Error);
+                await AssertCreationStateAsync(provider, operationId, created: false);
+            }
+
+            OrganizationProvisioningResult provisioned = await ProvisionAsync(provider, request);
+            Assert.Equal(OrganizationProvisioningOutcome.Provisioned, provisioned.Outcome);
+            Result<OrganizationMembershipSummaryDto> conflict = await DispatchAsync(provider, command);
+            Assert.True(conflict.IsFailure);
+            Assert.Equal(OrganizationApplicationErrors.CreationOperationConflict, conflict.Error);
+            OrganizationProvisioningResult replay = await ProvisionAsync(
+                provider, request with { ActorId = "admin:ordered-repair" });
+            Assert.Equal(OrganizationProvisioningOutcome.AlreadyProvisioned, replay.Outcome);
+            Assert.Equal(provisioned.Summary!.Organization.OrganizationId, replay.Summary!.Organization.OrganizationId);
+            Assert.Equal(provisioned.Summary.Membership.MembershipId, replay.Summary.Membership.MembershipId);
+            await AssertCreationStateAsync(provider, operationId, created: true);
+        }
+
+        Assert.Equal(0, policy.InvocationCount);
+    }
+
+    private static async Task AssertCreationStateAsync(ServiceProvider provider, Guid operationId, bool created)
+    {
+        await using AsyncServiceScope scope = provider.CreateAsyncScope();
+        OrganizationsDbContext database = scope.ServiceProvider.GetRequiredService<OrganizationsDbContext>();
+        Assert.Equal(created ? 1 : 0, await database.Organizations.CountAsync(item => item.Id == operationId));
+        Assert.Equal(created ? 1 : 0, await database.Memberships.CountAsync(item => item.OrganizationId == operationId));
+        Assert.Equal(created ? 2 : 0, await database.OutboxMessages.CountAsync(item => item.ScopeId == operationId.ToString("D")));
     }
 
     private static ServiceProvider CreateProvider(
